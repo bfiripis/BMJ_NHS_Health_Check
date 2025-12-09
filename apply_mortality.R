@@ -1,4 +1,5 @@
 #' Apply mortality probabilities and simulate death occurrence
+#' Optimized version with vectorized operations
 #'
 #' @param population Data frame with individual characteristics and disease status
 #' @param mortality_probabilities Data frame with baseline mortality rates
@@ -30,141 +31,283 @@ apply_mortality <- function(
   }
   
   updated_population <- population
+  n_population <- nrow(updated_population)
+  
+  # Pre-compute age groups and sex labels vectorized
+  updated_population$age_group_mortality <- get_age_group_mortality_vectorized(updated_population$age)
+  updated_population$sex_standard <- ifelse(updated_population$sex_label == "Men", "Male", "Female")
   
   # Initialize mortality probability columns for each disease
   for (disease in diseases) {
     updated_population[[paste0(disease, "_mortality_prob")]] <- 0
   }
   
-  # Initialize other-cause mortality probability
+  # Initialize other-cause and total mortality probability columns
   updated_population[["other_cause_mortality_prob"]] <- 0
   updated_population[["total_mortality_prob"]] <- 0
   
-  # Process each individual
-  for (i in 1:nrow(updated_population)) {
-    individual <- updated_population[i, ]
+  # Initialize death-related columns if they don't exist
+  if (!"alive" %in% names(updated_population)) {
+    updated_population$alive <- TRUE
+  }
+  if (!"death_year" %in% names(updated_population)) {
+    updated_population$death_year <- NA
+  }
+  if (!"cause_of_death" %in% names(updated_population)) {
+    updated_population$cause_of_death <- NA
+  }
+  
+  # Identify alive individuals (skip already dead individuals)
+  alive_mask <- updated_population$alive == TRUE & !is.na(updated_population$alive)
+  alive_indices <- which(alive_mask)
+  n_alive <- length(alive_indices)
+  
+  if (n_alive == 0) {
+    # Remove temporary columns and return if no one is alive
+    updated_population$age_group_mortality <- NULL
+    updated_population$sex_standard <- NULL
+    return(updated_population)
+  }
+  
+  # Get other-cause mortality probabilities vectorized for all alive individuals
+  other_cause_probs <- get_other_cause_mortality_vectorized(
+    mortality_probabilities,
+    updated_population$age_group_mortality[alive_mask],
+    updated_population$sex_standard[alive_mask]
+  )
+  
+  updated_population$other_cause_mortality_prob[alive_mask] <- other_cause_probs
+  
+  # Initialize survival probability matrix for competing risks calculation
+  survival_probs_matrix <- matrix(1, nrow = n_alive, ncol = length(diseases) + 1)
+  survival_probs_matrix[, 1] <- 1 - other_cause_probs  # Other-cause survival
+  
+  # Process each disease vectorized
+  for (j in seq_along(diseases)) {
+    disease <- diseases[j]
+    disease_col <- get_disease_column_name(disease)
     
-    # Skip if not alive
-    if ("alive" %in% names(individual) && individual$alive == FALSE && !is.na(individual$alive)) {
-      next
-    }
-    
-    age <- individual$age
-    sex <- ifelse(individual$sex_label == "Men", "Male", "Female")
-    age_group <- get_age_group_mortality(age)
-    
-    # Initialize probability tracking
-    disease_mortality_probs <- numeric(length(diseases))
-    names(disease_mortality_probs) <- diseases
-    other_cause_prob <- 0
-    
-    # Get other-cause mortality probability first
-    other_cause_prob <- get_other_cause_mortality(
-      mortality_probabilities,
-      age_group,
-      sex
-    )
-    
-    updated_population[i, "other_cause_mortality_prob"] <- other_cause_prob
-    
-    # Calculate disease-specific mortality probabilities for diseases the individual has
-    for (j in seq_along(diseases)) {
-      disease <- diseases[j]
-      disease_col <- get_disease_column_name(disease)
+    # Check which alive individuals have this disease
+    if (disease_col %in% names(updated_population)) {
+      has_disease_mask <- updated_population[[disease_col]][alive_mask] == TRUE & 
+        !is.na(updated_population[[disease_col]][alive_mask])
       
-      # Check if individual has this disease
-      if (disease_col %in% names(individual) && 
-          individual[[disease_col]] == TRUE && 
-          !is.na(individual[[disease_col]])) {
+      if (any(has_disease_mask)) {
+        # Get disease mortality probabilities for those with the disease
+        disease_mortality_probs <- rep(0, n_alive)
         
-        disease_mortality_prob <- get_disease_mortality(
+        disease_mortality_probs[has_disease_mask] <- get_disease_mortality_vectorized(
           mortality_probabilities,
           disease,
-          age_group,
-          sex
+          updated_population$age_group_mortality[alive_mask][has_disease_mask],
+          updated_population$sex_standard[alive_mask][has_disease_mask]
         )
         
-        disease_mortality_probs[j] <- disease_mortality_prob
-        updated_population[i, paste0(disease, "_mortality_prob")] <- disease_mortality_prob
-      }
-    }
-    
-    # Calculate total mortality probability
-    # Use competing risks approach: 1 - product of survival probabilities
-    survival_probs <- c(1 - other_cause_prob, 1 - disease_mortality_probs)
-    total_survival_prob <- prod(survival_probs)
-    total_mortality_prob <- 1 - total_survival_prob
-    
-    updated_population[i, "total_mortality_prob"] <- total_mortality_prob
-    
-    # Apply mortality if requested
-    if (apply_mortality && total_mortality_prob > 0) {
-      random_draw <- runif(1)
-      
-      if (random_draw < total_mortality_prob) {
-        # Death occurs - determine cause
-        updated_population[i, "alive"] <- FALSE
-        updated_population[i, "death_year"] <- current_year
+        # Update disease-specific mortality probability column
+        updated_population[alive_indices, paste0(disease, "_mortality_prob")] <- disease_mortality_probs
         
-        # Determine cause of death using proportional allocation
-        cause_probs <- c(other_cause_prob, disease_mortality_probs)
-        cause_names <- c("other_cause", diseases)
-        
-        # Only include causes with positive probabilities
-        positive_causes <- cause_probs > 0
-        cause_probs_positive <- cause_probs[positive_causes]
-        cause_names_positive <- cause_names[positive_causes]
-        
-        if (length(cause_probs_positive) > 0) {
-          # Normalize probabilities for cause determination
-          normalized_probs <- cause_probs_positive / sum(cause_probs_positive)
-          cumulative_probs <- cumsum(normalized_probs)
-          
-          cause_draw <- runif(1)
-          cause_index <- which(cause_draw <= cumulative_probs)[1]
-          
-          updated_population[i, "cause_of_death"] <- cause_names_positive[cause_index]
-        } else {
-          updated_population[i, "cause_of_death"] <- "other_cause"
-        }
+        # Update survival probability matrix
+        survival_probs_matrix[, j + 1] <- 1 - disease_mortality_probs
       }
     }
   }
+  
+  # Calculate total mortality probability using competing risks
+  total_survival_probs <- apply(survival_probs_matrix, 1, prod)
+  total_mortality_probs <- 1 - total_survival_probs
+  
+  updated_population$total_mortality_prob[alive_mask] <- total_mortality_probs
+  
+  # Apply mortality if requested
+  if (apply_mortality && any(total_mortality_probs > 0)) {
+    # Generate random draws for all alive individuals
+    random_draws <- runif(n_alive)
+    
+    # Determine who dies
+    death_mask <- random_draws < total_mortality_probs
+    death_indices <- alive_indices[death_mask]
+    n_deaths <- length(death_indices)
+    
+    if (n_deaths > 0) {
+      # Update alive status and death year
+      updated_population$alive[death_indices] <- FALSE
+      updated_population$death_year[death_indices] <- current_year
+      
+      # Determine cause of death vectorized
+      causes_of_death <- determine_cause_of_death_vectorized(
+        updated_population[death_indices, ],
+        diseases
+      )
+      
+      updated_population$cause_of_death[death_indices] <- causes_of_death
+    }
+  }
+  
+  # Remove temporary columns
+  updated_population$age_group_mortality <- NULL
+  updated_population$sex_standard <- NULL
   
   return(updated_population)
 }
 
-#' Get age group for mortality data - CORRECTED TO MATCH MORTALITY DATA
-#' @param age Numeric age
-#' @return Character age group
-get_age_group_mortality <- function(age) {
+#' Vectorized age group function for mortality
+#' @param ages Numeric vector of ages
+#' @return Character vector of age groups
+get_age_group_mortality_vectorized <- function(ages) {
   # Handle potential NA values
-  if (is.na(age)) {
-    warning("NA age provided to get_age_group_mortality - returning default '25 - 29 years'")
-    return("25 - 29 years")
+  na_mask <- is.na(ages)
+  age_groups <- character(length(ages))
+  
+  if (any(na_mask)) {
+    warning("NA ages provided to get_age_group_mortality_vectorized - using default '25 - 29 years'")
+    age_groups[na_mask] <- "25 - 29 years"
   }
   
-  if (age < 1) return("0 years")
-  if (age >= 1 & age <= 4) return("1 - 4 years")
-  if (age >= 5 & age <= 9) return("5 - 9 years")
-  if (age >= 10 & age <= 14) return("10 - 14 years")
-  if (age >= 15 & age <= 19) return("15 - 19 years")
-  if (age >= 20 & age <= 24) return("20 - 24 years")
-  if (age >= 25 & age <= 29) return("25 - 29 years")
-  if (age >= 30 & age <= 34) return("30 - 34 years")
-  if (age >= 35 & age <= 39) return("35 - 39 years")
-  if (age >= 40 & age <= 44) return("40 - 44 years")
-  if (age >= 45 & age <= 49) return("45 - 49 years")
-  if (age >= 50 & age <= 54) return("50 - 54 years")
-  if (age >= 55 & age <= 59) return("55 - 59 years")
-  if (age >= 60 & age <= 64) return("60 - 64 years")
-  if (age >= 65 & age <= 69) return("65 - 69 years")
-  if (age >= 70 & age <= 74) return("70 - 74 years")
-  if (age >= 75 & age <= 79) return("75 - 79 years")
-  if (age >= 80 & age <= 84) return("80 - 84 years")
-  if (age >= 85 & age <= 89) return("85 - 89 years")
-  if (age >= 90 & age <= 94) return("90 - 94 years")
-  if (age >= 95) return("95+ years")
+  valid_ages <- ages[!na_mask]
+  valid_groups <- character(length(valid_ages))
+  
+  valid_groups[valid_ages < 1] <- "0 years"
+  valid_groups[valid_ages >= 1 & valid_ages <= 4] <- "1 - 4 years"
+  valid_groups[valid_ages >= 5 & valid_ages <= 9] <- "5 - 9 years"
+  valid_groups[valid_ages >= 10 & valid_ages <= 14] <- "10 - 14 years"
+  valid_groups[valid_ages >= 15 & valid_ages <= 19] <- "15 - 19 years"
+  valid_groups[valid_ages >= 20 & valid_ages <= 24] <- "20 - 24 years"
+  valid_groups[valid_ages >= 25 & valid_ages <= 29] <- "25 - 29 years"
+  valid_groups[valid_ages >= 30 & valid_ages <= 34] <- "30 - 34 years"
+  valid_groups[valid_ages >= 35 & valid_ages <= 39] <- "35 - 39 years"
+  valid_groups[valid_ages >= 40 & valid_ages <= 44] <- "40 - 44 years"
+  valid_groups[valid_ages >= 45 & valid_ages <= 49] <- "45 - 49 years"
+  valid_groups[valid_ages >= 50 & valid_ages <= 54] <- "50 - 54 years"
+  valid_groups[valid_ages >= 55 & valid_ages <= 59] <- "55 - 59 years"
+  valid_groups[valid_ages >= 60 & valid_ages <= 64] <- "60 - 64 years"
+  valid_groups[valid_ages >= 65 & valid_ages <= 69] <- "65 - 69 years"
+  valid_groups[valid_ages >= 70 & valid_ages <= 74] <- "70 - 74 years"
+  valid_groups[valid_ages >= 75 & valid_ages <= 79] <- "75 - 79 years"
+  valid_groups[valid_ages >= 80 & valid_ages <= 84] <- "80 - 84 years"
+  valid_groups[valid_ages >= 85 & valid_ages <= 89] <- "85 - 89 years"
+  valid_groups[valid_ages >= 90 & valid_ages <= 94] <- "90 - 94 years"
+  valid_groups[valid_ages >= 95] <- "95+ years"
+  
+  age_groups[!na_mask] <- valid_groups
+  
+  return(age_groups)
+}
+
+#' Vectorized other-cause mortality lookup
+#' @param mortality_probabilities Data frame with mortality rates
+#' @param age_groups Character vector of age groups
+#' @param sexes Character vector of sex labels
+#' @return Numeric vector of other-cause mortality probabilities
+get_other_cause_mortality_vectorized <- function(mortality_probabilities, age_groups, sexes) {
+  
+  # Create lookup table for other-cause mortality
+  # Get unique combinations to avoid duplication
+  lookup_data <- unique(mortality_probabilities[, c("age", "sex_label", "other_cause_annual_prob")])
+  
+  # Create combined keys for matching
+  lookup_keys <- paste(lookup_data$age, lookup_data$sex_label, sep = "|||")
+  population_keys <- paste(age_groups, sexes, sep = "|||")
+  
+  # Match and extract probabilities
+  match_indices <- match(population_keys, lookup_keys)
+  probabilities <- lookup_data$other_cause_annual_prob[match_indices]
+  
+  # Handle NAs
+  na_mask <- is.na(probabilities)
+  if (any(na_mask)) {
+    unique_missing <- unique(population_keys[na_mask])
+    warning(paste("No other-cause mortality found for combinations:", 
+                  paste(unique_missing, collapse = ", "), "- returning 0"))
+    probabilities[na_mask] <- 0
+  }
+  
+  return(probabilities)
+}
+
+#' Vectorized disease-specific mortality lookup
+#' @param mortality_probabilities Data frame with mortality rates
+#' @param disease Character disease name
+#' @param age_groups Character vector of age groups
+#' @param sexes Character vector of sex labels
+#' @return Numeric vector of disease-specific mortality probabilities
+get_disease_mortality_vectorized <- function(mortality_probabilities, disease, age_groups, sexes) {
+  
+  # Filter mortality data for this disease
+  disease_data <- mortality_probabilities[mortality_probabilities$disease == disease, ]
+  
+  if (nrow(disease_data) == 0) {
+    warning(paste("No mortality data found for disease:", disease))
+    return(rep(0, length(age_groups)))
+  }
+  
+  # Create lookup
+  lookup_keys <- paste(disease_data$age, disease_data$sex_label, sep = "|||")
+  population_keys <- paste(age_groups, sexes, sep = "|||")
+  match_indices <- match(population_keys, lookup_keys)
+  
+  probabilities <- disease_data$annual_disease_mortality_prob[match_indices]
+  
+  # Handle NAs
+  na_mask <- is.na(probabilities)
+  if (any(na_mask)) {
+    unique_missing <- unique(population_keys[na_mask])
+    warning(paste("No disease mortality found for", disease, "in combinations:", 
+                  paste(unique_missing, collapse = ", "), "- returning 0"))
+    probabilities[na_mask] <- 0
+  }
+  
+  return(probabilities)
+}
+
+#' Vectorized cause of death determination
+#' @param death_population Data frame of individuals who died
+#' @param diseases Character vector of diseases
+#' @return Character vector of causes of death
+determine_cause_of_death_vectorized <- function(death_population, diseases) {
+  n_deaths <- nrow(death_population)
+  causes_of_death <- character(n_deaths)
+  
+  for (i in 1:n_deaths) {
+    individual <- death_population[i, ]
+    
+    # Collect mortality probabilities
+    other_cause_prob <- individual$other_cause_mortality_prob
+    disease_probs <- numeric(length(diseases))
+    names(disease_probs) <- diseases
+    
+    for (j in seq_along(diseases)) {
+      disease <- diseases[j]
+      prob_col <- paste0(disease, "_mortality_prob")
+      if (prob_col %in% names(individual)) {
+        disease_probs[j] <- individual[[prob_col]]
+      }
+    }
+    
+    # Combine all cause probabilities
+    cause_probs <- c(other_cause_prob, disease_probs)
+    cause_names <- c("other_cause", diseases)
+    
+    # Only include causes with positive probabilities
+    positive_causes <- cause_probs > 0 & !is.na(cause_probs)
+    
+    if (any(positive_causes)) {
+      cause_probs_positive <- cause_probs[positive_causes]
+      cause_names_positive <- cause_names[positive_causes]
+      
+      # Normalize probabilities for cause determination
+      normalized_probs <- cause_probs_positive / sum(cause_probs_positive)
+      cumulative_probs <- cumsum(normalized_probs)
+      
+      cause_draw <- runif(1)
+      cause_index <- which(cause_draw <= cumulative_probs)[1]
+      
+      causes_of_death[i] <- cause_names_positive[cause_index]
+    } else {
+      causes_of_death[i] <- "other_cause"
+    }
+  }
+  
+  return(causes_of_death)
 }
 
 #' Get disease column name for mortality lookup - FIXED TO MATCH ACTUAL DATA
@@ -183,63 +326,17 @@ get_disease_column_name <- function(disease) {
   return(disease_col_lookup[[disease]])
 }
 
-#' Get disease-specific mortality probability - FIXED
-#' @param mortality_probabilities Data frame with mortality rates
-#' @param disease Character disease name (exactly as in data)
-#' @param age_group Character age group
-#' @param sex Character sex
-#' @return Numeric disease mortality probability
-get_disease_mortality <- function(mortality_probabilities, disease, age_group, sex) {
-  # Disease names should match exactly what's in the data
-  # Based on your data: CHD, colorectal_cancer, COPD, lung_cancer, stroke
-  
-  # Find matching row
-  match_row <- mortality_probabilities[
-    mortality_probabilities$disease == disease &
-      mortality_probabilities$age == age_group &
-      mortality_probabilities$sex_label == sex,
-  ]
-  
-  if (nrow(match_row) == 0) {
-    warning(paste("No disease mortality found for", disease, age_group, sex, "- returning 0"))
-    return(0)
-  }
-  
-  # Return disease-specific mortality probability (handling NA values)
-  disease_mortality <- match_row$annual_disease_mortality_prob[1]
-  if (is.na(disease_mortality)) {
-    return(0)
-  }
-  
-  return(disease_mortality)
+# Keep original individual functions for backward compatibility
+get_age_group_mortality <- function(age) {
+  return(get_age_group_mortality_vectorized(age))
 }
 
-#' Get other-cause mortality probability - FIXED VERSION
-#' @param mortality_probabilities Data frame with mortality rates
-#' @param age_group Character age group
-#' @param sex Character sex
-#' @return Numeric other-cause mortality probability
+get_disease_mortality <- function(mortality_probabilities, disease, age_group, sex) {
+  return(get_disease_mortality_vectorized(mortality_probabilities, disease, age_group, sex))
+}
+
 get_other_cause_mortality <- function(mortality_probabilities, age_group, sex) {
-  # Find matching rows
-  match_rows <- mortality_probabilities[
-    mortality_probabilities$age == age_group &
-      mortality_probabilities$sex_label == sex,
-  ]
-  
-  if (nrow(match_rows) == 0) {
-    warning(paste("No other-cause mortality found for", age_group, sex, "- returning 0"))
-    return(0)
-  }
-  
-  # Get the first row (they should all have the same other-cause mortality)
-  match_row <- match_rows[1, ]
-  
-  other_cause_mortality <- match_row$other_cause_annual_prob[1]
-  if (is.na(other_cause_mortality)) {
-    return(0)
-  }
-  
-  return(other_cause_mortality)
+  return(get_other_cause_mortality_vectorized(mortality_probabilities, age_group, sex))
 }
 
 # Example Usage

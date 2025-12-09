@@ -4,14 +4,11 @@ library(readr)
 library(janitor)
 library(purrr)
 library(tidyr)
-
-generate_hse_distributions <- function() {
-  hse_file_path <- "data/raw/hse_2021_eul_v1.tab"
-  prevalence_file_path <- "data/prevalence.csv"
+generate_hse_distributions <- function(hse_2021_file_path = "data/raw/hse_2021_eul_v1.tab", 
+                                       prevalence_file_path = "data/prevalence.csv") {
   
-  
-  if (file.exists(hse_file_path)) {
-    hse_data <- read_tsv(hse_file_path) %>%
+  if (file.exists(hse_2021_file_path)) {
+    hse_data <- read_tsv(hse_2021_file_path, show_col_types = FALSE) %>%
       clean_names(case = "old_janitor") %>%
       mutate(
         # Create age groups using age35g (which covers all ages 0+)
@@ -50,8 +47,8 @@ generate_hse_distributions <- function() {
         )
       ) %>%
       # Filter based on data availability
-      filter(!is.na(age_group)) %>%
-      filter(
+      dplyr::filter(!is.na(age_group)) %>%
+      dplyr::filter(
         (is_child == TRUE) |
           (is_child == FALSE & (!is.na(bmi_clean) | !is.na(sbp_clean) |
                                   (!is.na(smkevr_19) & !is.na(cignow_19))))
@@ -81,7 +78,7 @@ generate_hse_distributions <- function() {
           TRUE ~ NA_character_
         )
       ) %>%
-      filter(!is.na(smoking_status), !is.na(age_group))
+      dplyr::filter(!is.na(smoking_status), !is.na(age_group))
     
     # --- Helper Function for Distribution Fitting ---
     
@@ -104,25 +101,25 @@ generate_hse_distributions <- function() {
     
     # 1. Primary Fallback: Sex-specific, All Ages combined
     bmi_fallback_sex <- hse_data %>%
-      filter(!is.na(bmi_clean)) %>%
+      dplyr::filter(!is.na(bmi_clean)) %>%
       group_by(sex_label) %>%
       do(estimate_normal_params(.$bmi_clean)) %>%
       rename(mean_sex = mean, sd_sex = sd) %>%
       dplyr::select(sex_label, mean_sex, sd_sex)
     
     sbp_fallback_sex <- hse_data %>%
-      filter(!is.na(sbp_clean)) %>%
+      dplyr::filter(!is.na(sbp_clean)) %>%
       group_by(sex_label) %>%
       do(estimate_normal_params(.$sbp_clean)) %>%
       rename(mean_sex = mean, sd_sex = sd) %>%
       dplyr::select(sex_label, mean_sex, sd_sex)
     
     # 2. Secondary Fallback: Overall All Ages/Sexes combined
-    bmi_overall_params <- hse_data %>% filter(!is.na(bmi_clean)) %>% pull(bmi_clean) %>% estimate_normal_params()
+    bmi_overall_params <- hse_data %>% dplyr::filter(!is.na(bmi_clean)) %>% pull(bmi_clean) %>% estimate_normal_params()
     bmi_overall_mean <- bmi_overall_params$mean
     bmi_overall_sd <- bmi_overall_params$sd
     
-    sbp_overall_params <- hse_data %>% filter(!is.na(sbp_clean)) %>% pull(sbp_clean) %>% estimate_normal_params()
+    sbp_overall_params <- hse_data %>% dplyr::filter(!is.na(sbp_clean)) %>% pull(sbp_clean) %>% estimate_normal_params()
     sbp_overall_mean <- sbp_overall_params$mean
     sbp_overall_sd <- sbp_overall_params$sd
     
@@ -144,7 +141,7 @@ generate_hse_distributions <- function() {
     
     # Calculate parameters for all age/sex groups (N < 5 groups will have NA/low-N estimates)
     bmi_distributions_raw <- hse_data %>%
-      filter(!is.na(bmi_clean)) %>%
+      dplyr::filter(!is.na(bmi_clean)) %>%
       group_by(age_group, sex_label) %>%
       do(estimate_normal_params(.$bmi_clean)) %>%
       ungroup()
@@ -170,7 +167,7 @@ generate_hse_distributions <- function() {
     
     # Calculate parameters for all age/sex groups
     sbp_distributions_raw <- hse_data %>%
-      filter(!is.na(sbp_clean)) %>%
+      dplyr::filter(!is.na(sbp_clean)) %>%
       group_by(age_group, sex_label) %>%
       do(estimate_normal_params(.$sbp_clean)) %>%
       ungroup()
@@ -235,7 +232,7 @@ generate_hse_distributions <- function() {
     
     # Complete BMI proportions for adults
     bmi_proportions_adults_raw <- hse_data %>%
-      filter(!is.na(bmi_category), !is_child) %>%
+      dplyr::filter(!is.na(bmi_category), !is_child) %>%
       group_by(age_group, sex_label) %>%
       summarise(
         total = n(),
@@ -252,7 +249,7 @@ generate_hse_distributions <- function() {
     
     # Calculate overall BMI proportions as fallback for adults
     overall_bmi_props <- hse_data %>%
-      filter(!is.na(bmi_category), !is_child) %>%
+      dplyr::filter(!is.na(bmi_category), !is_child) %>%
       summarise(
         total = n(),
         underweight = sum(bmi_category == "Underweight"),
@@ -267,7 +264,7 @@ generate_hse_distributions <- function() {
     
     # Get adult age groups only
     adult_age_groups <- all_age_sex_combinations %>%
-      filter(!age_group %in% c("0 - 1 years", "2 - 4 years", "5 - 7 years", "8 - 10 years", "11 - 12 years", "13 - 15 years"))
+      dplyr::filter(!age_group %in% c("0 - 1 years", "2 - 4 years", "5 - 7 years", "8 - 10 years", "11 - 12 years", "13 - 15 years"))
     
     bmi_proportions_adults <- adult_age_groups %>%
       left_join(bmi_proportions_adults_raw, by = c("age_group", "sex_label")) %>%
@@ -286,7 +283,7 @@ generate_hse_distributions <- function() {
     
     # Use 16-19 years as template for children BMI proportions
     children_bmi_props_template <- bmi_proportions_adults %>%
-      filter(age_group == "16 - 19 years") %>%
+      dplyr::filter(age_group == "16 - 19 years") %>%
       dplyr::select(-age_group)
     
     children_bmi_proportions <- bind_rows(
@@ -303,7 +300,7 @@ generate_hse_distributions <- function() {
     
     # Complete SBP proportions
     sbp_proportions_raw <- hse_data %>%
-      filter(!is.na(sbp_category)) %>%
+      dplyr::filter(!is.na(sbp_category)) %>%
       group_by(age_group, sex_label) %>%
       summarise(
         total = n(),
@@ -318,7 +315,7 @@ generate_hse_distributions <- function() {
     
     # Calculate overall SBP proportions as fallback
     overall_sbp_props <- hse_data %>%
-      filter(!is.na(sbp_category)) %>%
+      dplyr::filter(!is.na(sbp_category)) %>%
       summarise(
         total = n(),
         normotensive = sum(sbp_category == "Normotensive"),
@@ -379,7 +376,7 @@ generate_hse_distributions <- function() {
         ),
         prevalence_prob = rate_per_100k / 100000
       ) %>%
-      filter(!is.na(age_lower), !is.na(age_upper))
+      dplyr::filter(!is.na(age_lower), !is.na(age_upper))
   } else {
     disease_prevalence <- data.frame()
   }

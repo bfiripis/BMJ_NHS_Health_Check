@@ -21,7 +21,7 @@ calculate_post_incidence_mortality <- function(mortality_data = NULL,
   }
   
   mortality_data <- mortality_data %>%
-    filter(measure == "mortality") %>%
+    dplyr::filter(measure == "mortality") %>%
     mutate(sex_label = str_to_title(sex)) %>%
     dplyr::select(disease, age, sex_label, mortality_per_100k = rate_per_100k)
   
@@ -31,7 +31,7 @@ calculate_post_incidence_mortality <- function(mortality_data = NULL,
   }
   
   prevalence_data <- prevalence_data %>%
-    filter(measure == "prevalence") %>%
+    dplyr::filter(measure == "prevalence") %>%
     mutate(sex_label = str_to_title(sex)) %>%
     dplyr::select(disease, age, sex_label, prevalence_per_100k = rate_per_100k)
   
@@ -97,7 +97,7 @@ calculate_post_incidence_mortality <- function(mortality_data = NULL,
       # Convert rate per 100,000 to annual probability (divide by 100,000)
       all_cause_annual_prob = as.numeric(all_cause_mortality_per_100k) / 100000
     ) %>%
-    filter(!is.na(all_cause_mortality_per_100k) & !is.na(age_group)) %>%
+    dplyr::filter(!is.na(all_cause_mortality_per_100k) & !is.na(age_group)) %>%
     group_by(sex_label, age_group) %>%
     summarise(
       all_cause_annual_prob = mean(all_cause_annual_prob, na.rm = TRUE),

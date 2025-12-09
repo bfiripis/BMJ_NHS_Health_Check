@@ -11,13 +11,23 @@ library(janitor)
 #' 
 #' Extracts and processes HSE risk factor data with model-compatible blood pressure categories
 #' 
+#' @param hse_smoking_file_path Path to HSE smoking data Excel file
+#' @param hse_bmi_file_path Path to HSE BMI data Excel file  
+#' @param hse_bp_file_path Path to HSE blood pressure data Excel file
+#' @param hse_individual_file_path Path to HSE individual-level data file
 #' @return List containing processed datasets for smoking, BMI, and blood pressure
-process_longitudinal_hse_data <- function() {
+process_longitudinal_hse_data <- function(hse_smoking_file_path = "data/raw/Health_Survey_for_England/2022/HSE-2022-Adults'-health-related-behaviours-tables.xlsx",
+                                          hse_bmi_file_path = "data/raw/Health_Survey_for_England/2022/HSE-2022-Overweight-and-obesity-tables.xlsx",
+                                          hse_bp_file_path = "data/raw/Health_Survey_for_England/2022/HSE-2022-Adult-health-tables.xlsx",
+                                          hse_individual_file_path = "data/raw/hse_2021_eul_v1.tab") {
   
   # Extract smoking data
   extract_smoking_data <- function() {
-    hse_smoking_file_path <- "data/raw/Health_Survey_for_England/2022/HSE-2022-Adults'-health-related-behaviours-tables.xlsx"
-    data <- read_excel(hse_smoking_file_path, sheet = "Table 2")
+    data <- suppressMessages(
+      suppressWarnings(
+        read_excel(hse_smoking_file_path, sheet = "Table 2")
+        )
+      )
     years <- as.numeric(data[3, 2:31])
     
     row_mapping <- list(
@@ -111,8 +121,11 @@ process_longitudinal_hse_data <- function() {
   
   # Extract BMI data
   extract_bmi_data <- function() {
-    hse_bmi_file_path <- "data/raw/Health_Survey_for_England/2022/HSE-2022-Overweight-and-obesity-tables.xlsx"
-    data <- read_excel(hse_bmi_file_path, sheet = "Table 3")
+    data <- suppressMessages(
+      suppressWarnings(
+        read_excel(hse_bmi_file_path, sheet = "Table 3")
+        )
+      )
     years <- as.numeric(data[3, 2:31])
     
     row_mapping <- list(
@@ -246,8 +259,6 @@ process_longitudinal_hse_data <- function() {
   
   #' Extract and map blood pressure data
   extract_bp_data_mapped <- function() {
-    hse_bp_file_path <- "data/raw/Health_Survey_for_England/2022/HSE-2022-Adult-health-tables.xlsx"
-    hse_file_path <- "data/raw/hse_2021_eul_v1.tab"
     
     # Define target age groups for final output
     target_age_groups <- c("16 - 24 years", "25 - 34 years", "35 - 44 years", 
@@ -255,9 +266,9 @@ process_longitudinal_hse_data <- function() {
     
     # Estimate age-specific BP proportions using smooth age-SBP relationship
     estimate_age_specific_bp_rates <- function() {
-      hse_data <- read_tsv(hse_file_path) %>%
+      hse_data <- read_tsv(hse_individual_file_path, show_col_types = FALSE) %>%
         clean_names(case = "old_janitor") %>%
-        filter(!is.na(omsysval) & omsysval > 0 &     # Valid BP measurements
+        dplyr::filter(!is.na(omsysval) & omsysval > 0 &     # Valid BP measurements
                  !is.na(age35g) & age35g >= 7) %>%     # Adults only (age35g >= 7 means 16+)
         mutate(
           sex_label = ifelse(sex == 1, "Men", "Women"),
@@ -282,7 +293,7 @@ process_longitudinal_hse_data <- function() {
             TRUE ~ NA_real_
           )
         ) %>%
-        filter(!is.na(age_continuous))
+        dplyr::filter(!is.na(age_continuous))
       
       # Include 75+ in target predictions
       target_ages <- data.frame(
@@ -293,7 +304,7 @@ process_longitudinal_hse_data <- function() {
       bp_age_models <- data.frame()
       
       for(sex_val in c("Men", "Women")) {
-        sex_data <- hse_data %>% filter(sex_label == sex_val)
+        sex_data <- hse_data %>% dplyr::filter(sex_label == sex_val)
         
         # Fit logistic models for BP thresholds by age
         model_120 <- glm(I(omsysval < 120) ~ age_continuous, 
@@ -329,7 +340,11 @@ process_longitudinal_hse_data <- function() {
     
     # Get the HSE longitudinal BP trends (overall rates by sex/year)
     extract_longitudinal_trends <- function() {
-      table12_raw <- read_excel(hse_bp_file_path, sheet = "Table 12", col_names = FALSE)
+      table12_raw <- suppressMessages(
+        suppressWarnings(
+          read_excel(hse_bp_file_path, sheet = "Table 12", col_names = FALSE)
+          )
+        )
       
       years <- c(2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 
                  2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 
@@ -416,7 +431,7 @@ process_longitudinal_hse_data <- function() {
       
       # Get proportions for this sex
       sex_coefficients <- mapping_coefficients %>%
-        filter(sex_label == trend_row$sex_label)
+        dplyr::filter(sex_label == trend_row$sex_label)
       
       if(trend_row$model_bp_category == "mixed_under_140") {
         # Split mixed_under_140 into <120 and 120-140 for each age group
@@ -495,13 +510,26 @@ process_longitudinal_hse_data <- function() {
 #' Takes longitudinal HSE risk factor data and projects future risk factor trends
 #' using multinomial logistic regression with parametric bootstrap confidence intervals
 #' 
-#' @param hse_data List containing extracted HSE datasets (smoking, bmi, sbp)
+#' @param hse_smoking_file_path Path to HSE smoking data Excel file
+#' @param hse_bmi_file_path Path to HSE BMI data Excel file  
+#' @param hse_bp_file_path Path to HSE blood pressure data Excel file
+#' @param hse_individual_file_path Path to HSE individual-level data file
 #' @param projection_years Vector of years to project (default: 2025:2040)
 #' @param n_samples Number of samples for confidence intervals (default: 1000)
 #' @return List containing projections, model coefficients, and metadata
-generate_longitudinal_risk_factor_distributions <- function(projection_years = 2025:2040, n_samples = 1000) {
+generate_longitudinal_risk_factor_distributions <- function(hse_smoking_file_path = "data/raw/Health_Survey_for_England/2022/HSE-2022-Adults'-health-related-behaviours-tables.xlsx",
+                                                           hse_bmi_file_path = "data/raw/Health_Survey_for_England/2022/HSE-2022-Overweight-and-obesity-tables.xlsx",
+                                                           hse_bp_file_path = "data/raw/Health_Survey_for_England/2022/HSE-2022-Adult-health-tables.xlsx",
+                                                           hse_individual_file_path = "data/raw/hse_2021_eul_v1.tab",
+                                                           projection_years = 2025:2040, 
+                                                           n_samples = 1000) {
   
-  hse_data <- process_longitudinal_hse_data()
+  hse_data <- process_longitudinal_hse_data(
+    hse_smoking_file_path = hse_smoking_file_path,
+    hse_bmi_file_path = hse_bmi_file_path,
+    hse_bp_file_path = hse_bp_file_path,
+    hse_individual_file_path = hse_individual_file_path
+  )
   
   .fit_stratum_model <- function(rf_data, category_col, value_col, age_grp, sex_val, rf_name) {
     stratum_data <- rf_data %>%
@@ -654,7 +682,7 @@ generate_longitudinal_risk_factor_distributions <- function(projection_years = 2
   
   risk_factors <- list(
     smoking = list(data = hse_data$smoking %>% 
-                     filter(!age_group %in% c("All men", "All women")), 
+                     dplyr::filter(!age_group %in% c("All men", "All women")), 
                    category_col = "smoking_category", value_col = "rate"),
     bmi = list(data = hse_data$bmi, category_col = "bmi_category", value_col = "rate"),
     sbp = list(data = hse_data$sbp, category_col = "bp_category", value_col = "rate")
@@ -726,6 +754,15 @@ generate_longitudinal_risk_factor_distributions <- function(projection_years = 2
   return(final_results)
 }
 
-# Example usage
+# Example usage with default file paths
 # longitudinal_hse_distributions <- generate_longitudinal_risk_factor_distributions(
-# projection_years = 2025:2040, n_samples = 1000)
+#   projection_years = 2025:2040, n_samples = 1000)
+
+# Example usage with custom file paths
+# longitudinal_hse_distributions <- generate_longitudinal_risk_factor_distributions(
+#   hse_smoking_file_path = "custom/path/to/smoking_data.xlsx",
+#   hse_bmi_file_path = "custom/path/to/bmi_data.xlsx",
+#   hse_bp_file_path = "custom/path/to/bp_data.xlsx",
+#   hse_individual_file_path = "custom/path/to/individual_data.tab",
+#   projection_years = 2025:2040, 
+#   n_samples = 1000)

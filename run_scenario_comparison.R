@@ -4,12 +4,13 @@
 #' baseline vs intervention scenarios for the NHS Health Check program.
 #' It runs multiple scenarios using the same initial population for fair comparison.
 #'
-#' @param scenarios Character vector: scenarios to run (default: c("baseline", "intervention"))
+#' @param scenarios Character vector: scenarios to run (default: c("baseline", "intervention", "equalized_attendance"))
 #' @param n_individuals Number of individuals to generate for simulation
 #' @param start_year Starting year for simulation (default: 2025)
 #' @param end_year Ending year for simulation (default: 2040)
 #' @param baseline_params List of NHS Health Check parameters for baseline scenario
 #' @param intervention_params List of NHS Health Check parameters for intervention scenario
+#' @param equalized_attendance_params List of NHS Health Check parameters for equalized attendance scenario
 #' @param ons_distributions ONS age/gender distributions
 #' @param hse_distributions HSE risk factor distributions
 #' @param longitudinal_hse_distributions Longitudinal HSE distributions
@@ -21,7 +22,7 @@
 #' @param age_sex_utilities Age/sex utility values
 #' @param disease_utilities Disease utility decrements
 #' @param costs Disease cost estimates
-#' @param seed Random seed (default: 9001)
+#' @param seed Random seed (default: 1234)
 #' @param verbose Logical: print detailed monitoring output (default: TRUE)
 #' 
 #' @return List with results for each scenario and comparison analysis
@@ -47,29 +48,40 @@
 #'   smoking_cessation_rate = 0.0635
 #' )
 #' 
+#' equalized_attendance_params <- list(
+#'   male_attendance_rate = 0.4396,
+#'   female_attendance_rate = 0.4396,
+#'   intervention_cost = 150,
+#'   bmi_reduction = -0.3,
+#'   sbp_reduction = -3.22,
+#'   smoking_cessation_rate = 0.0635
+#' )
+#' 
 #' # Run comparison
 #' results <- run_scenario_comparison(
-#'   scenarios = c("baseline", "intervention"),
+#'   scenarios = c("baseline", "intervention", "equalized_attendance"),
 #'   n_individuals = 1000,
 #'   baseline_params = baseline_params,
 #'   intervention_params = intervention_params,
+#'   equalized_attendance_params = equalized_attendance_params,
 #'   # ... other standard parameters
 #' )
 #' 
 #' # Access results
 #' baseline_results <- results$scenario_results$baseline
 #' intervention_results <- results$scenario_results$intervention
+#' equalized_results <- results$scenario_results$equalized_attendance
 #' comparison <- results$comparison_summary
-#' icer <- results$icer_analysis
 #' }
 #' 
 #' @export
-run_scenario_comparison <- function(scenarios = c("baseline", "intervention"),
+run_scenario_comparison <- function(scenarios = c("baseline", "intervention", "equalized_attendance"),
                                     n_individuals,
                                     start_year = 2025,
                                     end_year = 2040,
                                     baseline_params = NULL,
                                     intervention_params = NULL,
+                                    equalized_attendance_params = NULL,
                                     ons_distributions,
                                     hse_distributions,
                                     longitudinal_hse_distributions,
@@ -81,7 +93,7 @@ run_scenario_comparison <- function(scenarios = c("baseline", "intervention"),
                                     age_sex_utilities,
                                     disease_utilities,
                                     costs,
-                                    seed = 9001,
+                                    seed = 1234,
                                     verbose = TRUE) {
   
   # Set default parameters if not provided
@@ -91,6 +103,17 @@ run_scenario_comparison <- function(scenarios = c("baseline", "intervention"),
   
   if (is.null(intervention_params)) {
     intervention_params <- get_nhs_health_check_defaults("intervention_75_target")
+  }
+  
+  if (is.null(equalized_attendance_params)) {
+    equalized_attendance_params <- list(
+      male_attendance_rate = 0.4396,
+      female_attendance_rate = 0.4396,
+      intervention_cost = 150,
+      bmi_reduction = -0.3,
+      sbp_reduction = -3.22,
+      smoking_cessation_rate = 0.0635
+    )
   }
   
   # Initialize results list
@@ -124,8 +147,10 @@ run_scenario_comparison <- function(scenarios = c("baseline", "intervention"),
       scenario_params <- baseline_params
     } else if (scenario == "intervention") {
       scenario_params <- intervention_params
+    } else if (scenario == "equalized_attendance") {
+      scenario_params <- equalized_attendance_params
     } else {
-      stop(sprintf("Unknown scenario: %s. Use 'baseline' or 'intervention'", scenario))
+      stop(sprintf("Unknown scenario: %s. Use 'baseline', 'intervention', or 'equalized_attendance'", scenario))
     }
     
     if (verbose) {
@@ -136,7 +161,7 @@ run_scenario_comparison <- function(scenarios = c("baseline", "intervention"),
     }
     
     # Run microsimulation for this scenario
-    scenario_results[[scenario]] <- run_microsimulation_with_nhs_health_check(
+    scenario_results[[scenario]] <- run_microsimulation(
       initial_population = initial_population,
       scenario_type = scenario,
       nhs_params = scenario_params,
@@ -173,225 +198,231 @@ run_scenario_comparison <- function(scenarios = c("baseline", "intervention"),
   # Generate comparison analysis
   comparison_summary <- compare_scenario_outcomes(scenario_results)
   
-  # Calculate ICER if both baseline and intervention scenarios exist
-  icer_analysis <- NULL
-  if ("baseline" %in% names(scenario_results) && "intervention" %in% names(scenario_results)) {
-    icer_analysis <- calculate_icer(scenario_results$baseline, scenario_results$intervention)
+  # Calculate ICER comparisons (baseline vs others)
+  icer_analysis <- list()
+  
+  if ("baseline" %in% names(scenario_results)) {
+    baseline_results <- scenario_results$baseline
     
-    if (verbose) {
-      cat("=== COST-EFFECTIVENESS ANALYSIS ===\n")
-      cat(sprintf("Additional QALYs: %.1f | Additional costs: £%.0fk\n",
-                  icer_analysis$delta_qalys, icer_analysis$delta_costs/1000))
+    # ICER for intervention vs baseline
+    if ("intervention" %in% names(scenario_results)) {
+      icer_analysis$intervention_vs_baseline <- calculate_icer(baseline_results, scenario_results$intervention)
       
-      if (!is.na(icer_analysis$icer)) {
-        cat(sprintf("ICER: £%.0f per QALY | Cost-effective (£30k): %s\n",
-                    icer_analysis$icer,
-                    ifelse(icer_analysis$cost_effective_30k, "YES", "NO")))
-      } else {
-        cat("ICER: Cannot calculate (no QALY difference)\n")
+      if (verbose) {
+        cat("=== INTERVENTION VS BASELINE COST-EFFECTIVENESS ===\n")
+        icer <- icer_analysis$intervention_vs_baseline
+        cat(sprintf("Additional QALYs: %.3f per person (%.1f total)\n",
+                    icer$qalys_gained_per_person, icer$delta_qalys))
+        cat(sprintf("Intervention costs: £%.2f per person (£%.0fk total)\n",
+                    icer$intervention_cost_per_person, icer$delta_intervention_costs/1000))
+        cat(sprintf("ICER: £%.0f per QALY gained\n",
+                    ifelse(is.finite(icer$icer), icer$icer, 0)))
+        cat(sprintf("Cost-effective at £20k threshold: %s\n",
+                    ifelse(icer$cost_effective_20k, "Yes", "No")))
+        cat(sprintf("Cost-effective at £30k threshold: %s\n\n",
+                    ifelse(icer$cost_effective_30k, "Yes", "No")))
       }
-      cat("==================================\n\n")
+    }
+    
+    # ICER for equalized_attendance vs baseline
+    if ("equalized_attendance" %in% names(scenario_results)) {
+      icer_analysis$equalized_vs_baseline <- calculate_icer(baseline_results, scenario_results$equalized_attendance)
+      
+      if (verbose) {
+        cat("=== EQUALIZED ATTENDANCE VS BASELINE COST-EFFECTIVENESS ===\n")
+        icer <- icer_analysis$equalized_vs_baseline
+        cat(sprintf("Additional QALYs: %.3f per person (%.1f total)\n",
+                    icer$qalys_gained_per_person, icer$delta_qalys))
+        cat(sprintf("Intervention costs: £%.2f per person (£%.0fk total)\n",
+                    icer$intervention_cost_per_person, icer$delta_intervention_costs/1000))
+        cat(sprintf("ICER: £%.0f per QALY gained\n",
+                    ifelse(is.finite(icer$icer), icer$icer, 0)))
+        cat(sprintf("Cost-effective at £20k threshold: %s\n",
+                    ifelse(icer$cost_effective_20k, "Yes", "No")))
+        cat(sprintf("Cost-effective at £30k threshold: %s\n\n",
+                    ifelse(icer$cost_effective_30k, "Yes", "No")))
+      }
     }
   }
   
-  # Save results
-  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  
-  # Save comparison summary
-  comparison_filename <- sprintf("nhs_health_check_comparison_%s.csv", timestamp)
-  write_csv(comparison_summary, comparison_filename)
-  
-  # Save individual scenario results
-  for (scenario in names(scenario_results)) {
-    outputs_filename <- sprintf("microsim_outputs_%s_%s.csv", scenario, timestamp)
-    population_filename <- sprintf("microsim_population_%s_%s.csv", scenario, timestamp)
+  # Calculate ICER for intervention vs equalized_attendance if both exist
+  if ("intervention" %in% names(scenario_results) && "equalized_attendance" %in% names(scenario_results)) {
+    icer_analysis$intervention_vs_equalized <- calculate_icer(scenario_results$equalized_attendance, scenario_results$intervention)
     
-    write_csv(scenario_results[[scenario]]$model_outputs, outputs_filename)
-    write_csv(scenario_results[[scenario]]$final_population, population_filename)
+    if (verbose) {
+      cat("=== INTERVENTION VS EQUALIZED ATTENDANCE COST-EFFECTIVENESS ===\n")
+      icer <- icer_analysis$intervention_vs_equalized
+      cat(sprintf("Additional QALYs: %.3f per person (%.1f total)\n",
+                  icer$qalys_gained_per_person, icer$delta_qalys))
+      cat(sprintf("Intervention costs: £%.2f per person (£%.0fk total)\n",
+                  icer$intervention_cost_per_person, icer$delta_intervention_costs/1000))
+      cat(sprintf("ICER: £%.0f per QALY gained\n",
+                  ifelse(is.finite(icer$icer), icer$icer, 0)))
+      cat(sprintf("Cost-effective at £20k threshold: %s\n",
+                  ifelse(icer$cost_effective_20k, "Yes", "No")))
+      cat(sprintf("Cost-effective at £30k threshold: %s\n\n",
+                  ifelse(icer$cost_effective_30k, "Yes", "No")))
+    }
   }
   
-  if (verbose) {
-    cat(sprintf("Results saved with timestamp: %s\n", timestamp))
-  }
-  
-  # Return comprehensive results
   return(list(
     scenario_results = scenario_results,
     comparison_summary = comparison_summary,
-    icer_analysis = icer_analysis,
-    parameters = list(
-      scenarios = scenarios,
-      n_individuals = n_individuals,
-      start_year = start_year,
-      end_year = end_year,
-      baseline_params = baseline_params,
-      intervention_params = intervention_params,
-      seed = seed
-    )
+    icer_analysis = icer_analysis
   ))
 }
 
 
-#' Modified Run Microsimulation with NHS Health Check Integration
+#' Alternative function that accepts a pre-generated population
+#' 
+#' This version is used by the Monte Carlo analysis to ensure 
+#' consistent populations across replications
 #'
-#' This is a modified version of your existing run_microsimulation function
-#' that includes the NHS Health Check intervention
+#' @param initial_population Pre-generated population dataframe
+#' @param scenarios Character vector of scenarios to run
+#' @param ... Other parameters passed to run_scenario_comparison
 #'
-#' @param initial_population Pre-generated initial population
-#' @param scenario_type Character: "baseline" or "intervention"
-#' @param nhs_params List of NHS Health Check parameters
-#' @param verbose Logical: print monitoring output (default: FALSE for scenario comparison)
-#' @param ... Other parameters passed to original run_microsimulation
-#' @return Same structure as original run_microsimulation
-run_microsimulation_with_nhs_health_check <- function(initial_population,
-                                                      scenario_type,
-                                                      nhs_params,
-                                                      start_year = 2025,
-                                                      end_year = 2040,
-                                                      ons_distributions,
-                                                      hse_distributions,
-                                                      longitudinal_hse_distributions,
-                                                      incidence_probabilities,
-                                                      smoking_relative_risks,
-                                                      blood_pressure_relative_risks,
-                                                      bmi_relative_risks,
-                                                      mortality_probabilities,
-                                                      age_sex_utilities,
-                                                      disease_utilities,
-                                                      costs,
-                                                      seed = 9001,
-                                                      verbose = FALSE) {
+#' @export
+run_scenario_comparison <- function(initial_population,
+                                                    scenarios = c("baseline", "intervention", "equalized_attendance"),
+                                                    start_year = 2025,
+                                                    end_year = 2040,
+                                                    baseline_params = NULL,
+                                                    intervention_params = NULL,
+                                                    equalized_attendance_params = NULL,
+                                                    longitudinal_hse_distributions,
+                                                    incidence_probabilities,
+                                                    smoking_relative_risks,
+                                                    blood_pressure_relative_risks,
+                                                    bmi_relative_risks,
+                                                    mortality_probabilities,
+                                                    age_sex_utilities,
+                                                    disease_utilities,
+                                                    costs,
+                                                    seed = 1234,
+                                                    verbose = TRUE) {
   
-  # Create sequence of simulation years
-  n_years <- (end_year - start_year)
-  simulation_years <- seq(1:n_years)
+  # Set default parameters if not provided
+  if (is.null(baseline_params)) {
+    baseline_params <- get_nhs_health_check_defaults("baseline_2018")
+  }
   
-  # Use provided initial population
-  population <- initial_population
+  if (is.null(intervention_params)) {
+    intervention_params <- get_nhs_health_check_defaults("intervention_75_target")
+  }
+  
+  if (is.null(equalized_attendance_params)) {
+    equalized_attendance_params <- list(
+      male_attendance_rate = 0.4396,
+      female_attendance_rate = 0.4396,
+      intervention_cost = 150,
+      bmi_reduction = -0.3,
+      sbp_reduction = -3.22,
+      smoking_cessation_rate = 0.0635
+    )
+  }
+  
+  # Initialize results list
+  scenario_results <- list()
   n_individuals <- nrow(initial_population)
   
-  # Define list of diseases
-  diseases = c("CHD", "stroke", "COPD", "lung_cancer", "colorectal_cancer")
+  if (verbose) {
+    cat("=== NHS HEALTH CHECK SCENARIO COMPARISON ===\n")
+    cat(sprintf("%d individuals | %d-%d | Scenarios: %s\n", 
+                n_individuals, start_year, end_year, paste(scenarios, collapse = ", ")))
+    cat("===========================================\n\n")
+  }
   
-  # Initialize model_outputs df 
-  model_outputs <- initialize_model_outputs(diseases)
-  
-  # For loop - each cycle represents 1 year in the microsimulation
-  for (year in simulation_years) {
+  # Loop through each scenario
+  for (scenario in scenarios) {
     
-    current_year <- start_year + year - 1L
+    if (verbose) {
+      cat(sprintf("=== %s SCENARIO ===\n", toupper(scenario)))
+    }
     
-    # Store current population before changes for comparison
-    previous_population <- population
+    # Get parameters for this scenario
+    if (scenario == "baseline") {
+      scenario_params <- baseline_params
+    } else if (scenario == "intervention") {
+      scenario_params <- intervention_params
+    } else if (scenario == "equalized_attendance") {
+      scenario_params <- equalized_attendance_params
+    } else {
+      stop(sprintf("Unknown scenario: %s. Use 'baseline', 'intervention', or 'equalized_attendance'", scenario))
+    }
     
-    # Filter out dead individuals from previous cycle
-    population <- population %>% filter(alive == TRUE)
+    if (verbose) {
+      cat(sprintf("NHS Health Check: M/F attendance %.1f%%/%.1f%% | £%.0f per check\n",
+                  scenario_params$male_attendance_rate * 100,
+                  scenario_params$female_attendance_rate * 100,
+                  scenario_params$intervention_cost))
+    }
     
-    # Process births and add children
-    population <- process_births_and_add_children(
-      population = population,
-      current_year = current_year,
+    # Run microsimulation for this scenario with the pre-generated population
+    scenario_results[[scenario]] <- run_microsimulation(
+      initial_population = initial_population,
+      scenario_type = scenario,
+      nhs_params = scenario_params,
+      start_year = start_year,
+      end_year = end_year,
       ons_distributions = ons_distributions,
-      hse_distributions = hse_distributions
-    )
-    
-    # Increment population age by 1
-    population$age <- population$age + 1L
-    
-    # Update individuals risk factors
-    population <- update_risk_factors(population = population,
-                                      longitudinal_hse_distributions = longitudinal_hse_distributions,
-                                      current_year = current_year)
-    
-    # Apply Smoking State Transitions
-    population <- apply_smoking_transitions(
-      population = population,
-      seed = seed + year
-    )
-    
-    # Apply NHS Health Check intervention
-    nhs_health_check_result <- apply_nhs_health_check(
-      population = population,
-      current_year = current_year,
-      scenario_type = scenario_type,
-      male_attendance_rate = nhs_params$male_attendance_rate,
-      female_attendance_rate = nhs_params$female_attendance_rate,
-      intervention_cost = nhs_params$intervention_cost,
-      bmi_reduction = nhs_params$bmi_reduction,
-      sbp_reduction = nhs_params$sbp_reduction,
-      smoking_cessation_rate = nhs_params$smoking_cessation_rate,
-      seed = seed + year
-    )
-    
-    population <- nhs_health_check_result$population
-    annual_intervention_costs <- nhs_health_check_result$intervention_costs
-    
-    # Apply disease incidence probabilities and simulate disease occurrence
-    population <- apply_disease_incidence(
-      population = population,
-      current_year = current_year,
+      hse_distributions = hse_distributions,
+      longitudinal_hse_distributions = longitudinal_hse_distributions,
       incidence_probabilities = incidence_probabilities,
       smoking_relative_risks = smoking_relative_risks,
       blood_pressure_relative_risks = blood_pressure_relative_risks,
       bmi_relative_risks = bmi_relative_risks,
-      diseases = diseases,
-      seed = seed
-    )
-    
-    # Apply mortality probabilities and simulate death occurrence
-    population <- apply_mortality(
-      population = population,
       mortality_probabilities = mortality_probabilities,
-      diseases = diseases,
-      current_year = current_year,
-      seed = seed
-    )
-    
-    # Calculate aggregate outcomes for this year
-    annual_outcomes <- calculate_aggregate_outcomes(
-      population = population,
-      current_year = current_year,
       age_sex_utilities = age_sex_utilities,
       disease_utilities = disease_utilities,
       costs = costs,
-      previous_population = previous_population,
-      utility_method = "minimum",
-      intervention_costs = annual_intervention_costs
+      seed = seed,
+      verbose = verbose
     )
     
-    # Add annual outcomes to model_outputs dataframe
-    model_outputs <- add_annual_outcomes(model_outputs, annual_outcomes)
-    
-    # Update previous population for next iteration
-    previous_population <- population
-    
-    # Concise year-by-year monitoring (only if verbose)
+    # Print scenario summary
     if (verbose) {
-      cat(sprintf("Year %d: %d alive | Deaths: %d | QALYs: %.0f | Costs: £%.0fk\n",
-                  current_year,
-                  annual_outcomes$alive_population,
-                  annual_outcomes$deaths_total,
-                  annual_outcomes$total_qalys,
-                  annual_outcomes$total_costs/1000))
+      results <- scenario_results[[scenario]]
+      alive_count <- sum(results$final_population$alive, na.rm = TRUE)
+      total_qalys <- sum(results$model_outputs$total_qalys, na.rm = TRUE)
+      total_costs <- sum(results$model_outputs$total_costs, na.rm = TRUE)
+      total_intervention_costs <- sum(results$model_outputs$intervention_costs, na.rm = TRUE)
+      
+      cat(sprintf("Complete: %d→%d alive | %.0f QALYs | £%.0fk total (£%.0fk intervention)\n\n", 
+                  n_individuals, alive_count, total_qalys, total_costs/1000, total_intervention_costs/1000))
     }
   }
   
-  # Return results in same format as original function
-  results <- list(
-    final_population = population,
-    model_outputs = model_outputs,
-    simulation_parameters = list(
-      scenario_type = scenario_type,
-      nhs_params = nhs_params,
-      n_individuals = n_individuals,
-      start_year = start_year,
-      end_year = end_year,
-      n_years = n_years,
-      seed = seed
-    )
-  )
+  # Generate comparison analysis
+  comparison_summary <- compare_scenario_outcomes(scenario_results)
   
-  return(results)
+  # Calculate ICER comparisons (baseline vs others)
+  icer_analysis <- list()
+  
+  if ("baseline" %in% names(scenario_results)) {
+    baseline_results <- scenario_results$baseline
+    
+    # ICER for intervention vs baseline
+    if ("intervention" %in% names(scenario_results)) {
+      icer_analysis$intervention_vs_baseline <- calculate_icer(baseline_results, scenario_results$intervention)
+    }
+    
+    # ICER for equalized_attendance vs baseline
+    if ("equalized_attendance" %in% names(scenario_results)) {
+      icer_analysis$equalized_vs_baseline <- calculate_icer(baseline_results, scenario_results$equalized_attendance)
+    }
+  }
+  
+  # Calculate ICER for intervention vs equalized_attendance if both exist
+  if ("intervention" %in% names(scenario_results) && "equalized_attendance" %in% names(scenario_results)) {
+    icer_analysis$intervention_vs_equalized <- calculate_icer(scenario_results$equalized_attendance, scenario_results$intervention)
+  }
+  
+  return(list(
+    scenario_results = scenario_results,
+    comparison_summary = comparison_summary,
+    icer_analysis = icer_analysis
+  ))
 }
 
 
@@ -468,117 +499,85 @@ compare_scenario_outcomes <- function(scenario_results) {
 
 #' Calculate Incremental Cost-Effectiveness Ratio (ICER)
 #'
+#' This function calculates ICER using only the NHS Health Check intervention costs
+#' rather than total healthcare system costs. This provides a policy-relevant answer
+#' to: "Is spending money on NHS Health Checks cost-effective?"
+#'
 #' @param baseline_results Results from baseline scenario
 #' @param intervention_results Results from intervention scenario
 #' @return List with ICER calculation details
 calculate_icer <- function(baseline_results, intervention_results) {
   
-  # Extract totals for each scenario
+  # Extract QALYs for each scenario
   baseline_qalys <- sum(baseline_results$model_outputs$total_qalys, na.rm = TRUE)
-  baseline_costs <- sum(baseline_results$model_outputs$total_costs, na.rm = TRUE)
-  
   intervention_qalys <- sum(intervention_results$model_outputs$total_qalys, na.rm = TRUE)
-  intervention_costs <- sum(intervention_results$model_outputs$total_costs, na.rm = TRUE)
+  
+  # Extract INTERVENTION costs only (not total healthcare costs)
+  baseline_intervention_costs <- sum(baseline_results$model_outputs$intervention_costs, na.rm = TRUE)
+  intervention_intervention_costs <- sum(intervention_results$model_outputs$intervention_costs, na.rm = TRUE)
+  
+  # Extract total healthcare costs (for reference and comparison)
+  baseline_total_costs <- sum(baseline_results$model_outputs$total_costs, na.rm = TRUE)
+  intervention_total_costs <- sum(intervention_results$model_outputs$total_costs, na.rm = TRUE)
   
   # Calculate differences
   delta_qalys <- intervention_qalys - baseline_qalys
-  delta_costs <- intervention_costs - baseline_costs
+  delta_intervention_costs <- intervention_intervention_costs - baseline_intervention_costs
+  delta_total_costs <- intervention_total_costs - baseline_total_costs
   
-  # Calculate ICER
-  icer <- ifelse(delta_qalys != 0, delta_costs / delta_qalys, NA)
+  # Calculate ICER using intervention costs only (primary metric)
+  icer <- ifelse(delta_qalys != 0, delta_intervention_costs / delta_qalys, NA)
+  
+  # Calculate ICER using total costs (for comparison/reference)
+  icer_total_costs <- ifelse(delta_qalys != 0, delta_total_costs / delta_qalys, NA)
   
   # Determine cost-effectiveness
   cost_effective_20k <- !is.na(icer) && icer <= 20000
   cost_effective_30k <- !is.na(icer) && icer <= 30000
   
+  # Calculate per-person metrics for easier interpretation
+  n_individuals <- baseline_results$simulation_parameters$n_individuals
+  intervention_cost_per_person <- delta_intervention_costs / n_individuals
+  qalys_gained_per_person <- delta_qalys / n_individuals
+  healthcare_cost_savings <- -delta_total_costs  # Positive = savings
+  healthcare_savings_per_person <- healthcare_cost_savings / n_individuals
+  
   result <- list(
+    # QALY outcomes
     baseline_qalys = baseline_qalys,
     intervention_qalys = intervention_qalys,
     delta_qalys = delta_qalys,
-    baseline_costs = baseline_costs,
-    intervention_costs = intervention_costs,
-    delta_costs = delta_costs,
-    icer = icer,
+    qalys_gained_per_person = qalys_gained_per_person,
+    
+    # Intervention costs (primary for ICER)
+    baseline_costs = baseline_intervention_costs,
+    intervention_costs = intervention_intervention_costs,
+    delta_costs = delta_intervention_costs,
+    
+    # Additional intervention cost fields
+    baseline_intervention_costs = baseline_intervention_costs,
+    intervention_intervention_costs = intervention_intervention_costs,
+    delta_intervention_costs = delta_intervention_costs,
+    intervention_cost_per_person = intervention_cost_per_person,
+    
+    # Total healthcare costs (for reference)
+    baseline_total_costs = baseline_total_costs,
+    intervention_total_costs = intervention_total_costs,
+    delta_total_costs = delta_total_costs,
+    healthcare_cost_savings = healthcare_cost_savings,
+    healthcare_savings_per_person = healthcare_savings_per_person,
+    
+    # ICERs
+    icer = icer,  # Primary ICER using intervention costs
+    icer_total_costs = icer_total_costs,  # Reference ICER using total costs
+    
+    # Cost-effectiveness decisions
     cost_effective_20k = cost_effective_20k,
-    cost_effective_30k = cost_effective_30k
+    cost_effective_30k = cost_effective_30k,
+    
+    # Additional context
+    n_individuals = n_individuals
   )
   
   return(result)
 }
-
-
-# Example USage
-#
-# # Load all required data
-# library(dplyr)
-# library(readr)
-# 
-# # Source required functions
-# source("R/apply_nhs_health_check.R")  # NHS Health Check function
-# source("R/run_scenario_comparison.R") # This file
-# # ... source all your other required functions
-# 
-# # Load data distributions and parameters
-# ons_distributions <- generate_ons_distributions()
-# hse_distributions <- generate_hse_distributions()
-# # ... load all your standard data files
-# 
-# # Method 1: Use default parameters
-# baseline_params <- get_nhs_health_check_defaults("baseline_2018")
-# intervention_params <- get_nhs_health_check_defaults("intervention_75_target")
-# 
-# results <- run_scenario_comparison(
-#   scenarios = c("baseline", "intervention"),
-#   n_individuals = 1000,
-#   start_year = 2025,
-#   end_year = 2035,  # Shorter for faster testing
-#   baseline_params = baseline_params,
-#   intervention_params = intervention_params,
-#   ons_distributions = ons_distributions,
-#   hse_distributions = hse_distributions,
-#   longitudinal_hse_distributions = longitudinal_hse_distributions,
-#   incidence_probabilities = incidence_probabilities,
-#   smoking_relative_risks = smoking_relative_risks,
-#   blood_pressure_relative_risks = blood_pressure_relative_risks,
-#   bmi_relative_risks = bmi_relative_risks,
-#   mortality_probabilities = mortality_probabilities,
-#   age_sex_utilities = age_sex_utilities,
-#   disease_utilities = disease_utilities,
-#   costs = costs,
-#   seed = 9001
-# )
-# 
-# # Method 2: Custom parameters for sensitivity analysis
-# custom_intervention_params <- list(
-#   male_attendance_rate = 0.80,        # Higher than standard 75%
-#   female_attendance_rate = 0.80,      # Higher than standard 75%
-#   intervention_cost = 120,             # Lower cost scenario
-#   bmi_reduction = -0.5,                # Stronger BMI effect
-#   sbp_reduction = -4.0,                # Stronger BP effect
-#   smoking_cessation_rate = 0.10       # Higher smoking cessation rate
-# )
-# 
-# sensitivity_results <- run_scenario_comparison(
-#   scenarios = c("baseline", "intervention"),
-#   n_individuals = 500,  # Smaller for speed
-#   baseline_params = baseline_params,
-#   intervention_params = custom_intervention_params,
-#   # ... same other parameters
-#   seed = 9002
-# )
-# 
-# # Access and analyze results
-# baseline_results <- results$scenario_results$baseline
-# intervention_results <- results$scenario_results$intervention
-# comparison_summary <- results$comparison_summary
-# icer_analysis <- results$icer_analysis
-# 
-# # Print key findings
-# print("=== SCENARIO COMPARISON ===")
-# print(comparison_summary)
-# 
-# if (!is.null(icer_analysis)) {
-#   cat(sprintf("\nICER: £%.0f per QALY gained\n", icer_analysis$icer))
-#   cat(sprintf("Cost-effective at £30k threshold: %s\n", 
-#               ifelse(icer_analysis$cost_effective_30k, "YES", "NO")))
-# }

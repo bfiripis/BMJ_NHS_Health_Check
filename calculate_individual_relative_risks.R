@@ -56,7 +56,7 @@ calculate_individual_bmi_rr <- function(bmi, age, sex, disease, bmi_rr_data) {
   
   # Find appropriate age range and RR
   disease_rr <- bmi_rr_data %>%
-    filter(Disease == disease, Sex_label == sex, BMI_Status == bmi_status) %>%
+    dplyr::filter(Disease == disease, Sex_label == sex, BMI_Status == bmi_status) %>%
     mutate(
       age_lower = case_when(
         Age == "0-20 years" ~ 0,
@@ -81,7 +81,7 @@ calculate_individual_bmi_rr <- function(bmi, age, sex, disease, bmi_rr_data) {
         TRUE ~ 120
       )
     ) %>%
-    filter(age >= age_lower, age <= age_upper)
+    dplyr::filter(age >= age_lower, age <= age_upper)
   
   if (nrow(disease_rr) > 0) {
     return(disease_rr$Relative_Risk[1])
@@ -110,7 +110,7 @@ calculate_individual_smoking_rr <- function(smoking_status, age, sex, disease, s
   
   # Find appropriate age range and RR
   disease_rr <- smoking_rr_data %>%
-    filter(Disease == disease, Sex_label == sex, Smoking_Status == smoking_data_status) %>%
+    dplyr::filter(Disease == disease, Sex_label == sex, Smoking_Status == smoking_data_status) %>%
     mutate(
       age_lower = case_when(
         Age == "<35 years" ~ 0,
@@ -137,7 +137,7 @@ calculate_individual_smoking_rr <- function(smoking_status, age, sex, disease, s
         TRUE ~ 120
       )
     ) %>%
-    filter(age >= age_lower, age <= age_upper)
+    dplyr::filter(age >= age_lower, age <= age_upper)
   
   if (nrow(disease_rr) > 0) {
     return(disease_rr$Relative_Risk[1])
@@ -158,7 +158,7 @@ calculate_individual_bp_rr <- function(sbp, age, sex, disease, bp_rr_data) {
   
   # Check if this disease has BP relative risks
   disease_bp <- bp_rr_data %>%
-    filter(Disease == disease, Sex_label == sex)
+    dplyr::filter(Disease == disease, Sex_label == sex)
   
   if (nrow(disease_bp) == 0) {
     return(1.0)  # No BP effect for this disease
@@ -169,7 +169,7 @@ calculate_individual_bp_rr <- function(sbp, age, sex, disease, bp_rr_data) {
     
     # Find appropriate age range
     disease_rr <- disease_bp %>%
-      filter(Hypertension_Status == "per_10mm_Hg") %>%
+      dplyr::filter(Hypertension_Status == "per_10mm_Hg") %>%
       mutate(
         age_lower = case_when(
           Age == "25-34 years" ~ 25,
@@ -192,7 +192,7 @@ calculate_individual_bp_rr <- function(sbp, age, sex, disease, bp_rr_data) {
           TRUE ~ 120
         )
       ) %>%
-      filter(age >= age_lower, age <= age_upper)
+      dplyr::filter(age >= age_lower, age <= age_upper)
     
     if (nrow(disease_rr) > 0) {
       # Calculate RR per 10mmHg increase above baseline (120 mmHg)
@@ -210,7 +210,7 @@ calculate_individual_bp_rr <- function(sbp, age, sex, disease, bp_rr_data) {
   hypertension_status <- ifelse(sbp >= 140, "Hypertension", "No_Hypertension")
   
   disease_rr <- disease_bp %>%
-    filter(Hypertension_Status == hypertension_status)
+    dplyr::filter(Hypertension_Status == hypertension_status)
   
   if (nrow(disease_rr) > 0) {
     return(disease_rr$Relative_Risk[1])
@@ -252,7 +252,7 @@ calculate_individual_mortality <- function(individual_data, baseline_mortality_r
     
     # Get baseline rate for this disease
     disease_baseline <- baseline_disease %>%
-      filter(disease == !!disease) %>%
+      dplyr::filter(disease == !!disease) %>%
       select(age_lower, sex_label, baseline_mortality_probability)
     
     individual_mortality <- individual_mortality %>%

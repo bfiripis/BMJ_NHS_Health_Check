@@ -1,17 +1,17 @@
 library(dplyr)
 
 #' Generate a new child individual with all microsimulation fields initialized
-#' 
+#'
 #' @param maternal_age Age of the mother at birth
 #' @param ons_distributions ONS population distributions
 #' @param hse_distributions HSE health distributions
 #' @param current_year Current simulation year
 #' @return List representing a newborn individual
-generate_child <- function(maternal_age, ons_distributions, hse_distributions, current_year) {
+generate_child <- function(maternal_age, ons_distributions, hse_distributions, current_year, sim_end_year = 2040) {
   
   # Sample child's sex (approximately 51% male, 49% female births)
   child_gender <- sample(c("Men", "Women"), 1, prob = c(
-    ons_distributions$gender_distributions$prop_sex["Men"], 
+    ons_distributions$gender_distributions$prop_sex["Men"],
     ons_distributions$gender_distributions$prop_sex["Women"]))
   
   # Child starts at age 0
@@ -20,7 +20,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   
   # Sample BMI from HSE distributions for 0-1 years age group
   bmi_params <- hse_distributions$distributions$bmi %>%
-    filter(age_group == !!age_group, sex_label == child_gender)
+    dplyr::filter(age_group == !!age_group, sex_label == child_gender)
   
   if (nrow(bmi_params) == 0 || is.na(bmi_params$mean) || is.na(bmi_params$sd)) {
     stop(paste("No BMI distribution found for:", age_group, child_gender))
@@ -36,7 +36,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   # Assign BMI category based on sampled value
   bmi_category <- case_when(
     bmi < 18.5 ~ "Underweight",
-    bmi >= 18.5 & bmi < 25 ~ "Normal weight", 
+    bmi >= 18.5 & bmi < 25 ~ "Normal weight",
     bmi >= 25 & bmi < 30 ~ "Overweight",
     bmi >= 30 ~ "Obese",
     TRUE ~ "Normal weight"
@@ -44,7 +44,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   
   # Sample SBP from HSE distributions for 0-1 years age group
   sbp_params <- hse_distributions$distributions$sbp %>%
-    filter(age_group == !!age_group, sex_label == child_gender)
+    dplyr::filter(age_group == !!age_group, sex_label == child_gender)
   
   if (nrow(sbp_params) == 0 || is.na(sbp_params$mean) || is.na(sbp_params$sd)) {
     stop(paste("No SBP distribution found for:", age_group, child_gender))
@@ -53,7 +53,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   base_sbp <- rnorm(1, sbp_params$mean, sbp_params$sd)
   
   # Age adjustment for SBP
-  age_adjustment <- pmax(0, (child_age - 25) * 0.35)  # Will be 0 for newborns
+  age_adjustment <- pmax(0, (child_age - 25) * 0.35) # Will be 0 for newborns
   sbp <- base_sbp + age_adjustment
   
   if (!is.na(sbp_params$min_val)) sbp <- pmax(sbp, sbp_params$min_val)
@@ -72,7 +72,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   
   # Sample smoking status from proportions for 0-1 years age group
   smoking_props <- hse_distributions$proportions$smoking %>%
-    filter(age_group == !!age_group, sex_label == child_gender)
+    dplyr::filter(age_group == !!age_group, sex_label == child_gender)
   
   if (nrow(smoking_props) == 0) {
     stop(paste("No smoking proportions found for:", age_group, child_gender))
@@ -81,7 +81,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   smoking_status <- sample(
     c("Never smoker", "Former smoker", "Current smoker"),
     1,
-    prob = c(smoking_props$prop_never, smoking_props$prop_ex, 
+    prob = c(smoking_props$prop_never, smoking_props$prop_ex,
              smoking_props$prop_current)
   )
   
@@ -94,7 +94,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
   
   # Generate future birth years if female
   if (child_gender == "Women") {
-    future_birth_years <- generate_future_birth_years(child_age, ons_distributions, current_year)
+    future_birth_years <- generate_future_birth_years(child_age, ons_distributions, current_year, sim_end_year)
   }
   
   # Change age group to match HSE longitudinal dataset
@@ -125,6 +125,8 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
     
     # Alive flag
     alive = TRUE,
+    
+    nhs_last_health_check_year = NA,
     
     # Disease status (all FALSE for newborns)
     chd = FALSE,
@@ -205,7 +207,7 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
 }
 
 #' Check for births and generate children in current simulation year
-#' 
+#'
 #' @param population Current population data frame
 #' @param current_year Current simulation year
 #' @param ons_distributions ONS population distributions
@@ -214,11 +216,12 @@ generate_child <- function(maternal_age, ons_distributions, hse_distributions, c
 process_births_and_add_children <- function(population,
                                             current_year,
                                             ons_distributions,
-                                            hse_distributions) {
+                                            hse_distributions,
+                                            sim_end_year = 2040) {
   
   # Find women who are giving birth this year
   women_giving_birth <- population %>%
-    filter(sex_label == "Women") %>%
+    dplyr::filter(sex_label == "Women") %>%
     rowwise() %>%
     mutate(
       giving_birth_this_year = if (length(birth_years) > 0 && !is.null(birth_years[[1]])) {
@@ -228,7 +231,7 @@ process_births_and_add_children <- function(population,
       }
     ) %>%
     ungroup() %>%
-    filter(giving_birth_this_year == TRUE)
+    dplyr::filter(giving_birth_this_year == TRUE)
   
   # If no births this year, return original population
   if (nrow(women_giving_birth) == 0) {
@@ -261,7 +264,8 @@ process_births_and_add_children <- function(population,
         maternal_age = maternal_age,
         ons_distributions = ons_distributions,
         hse_distributions = hse_distributions,
-        current_year = current_year
+        current_year = current_year,
+        sim_end_year = sim_end_year
       )
       
       new_children_list[[child_counter]] <- child
@@ -275,7 +279,7 @@ process_births_and_add_children <- function(population,
       original_birth_years_vector <- mother_birth_years_vector
       
       updated_birth_years <- original_birth_years_vector[original_birth_years_vector != current_year]
-      population$birth_years[[mother_idx]] <- list(updated_birth_years)
+      population$birth_years[[mother_idx]] <- updated_birth_years
       
       # Update n_births count
       population$n_births[mother_idx] <- population$n_births[mother_idx] + n_births_this_year
@@ -298,7 +302,7 @@ process_births_and_add_children <- function(population,
   # Create a template row by copying the first row and modifying it
   template_row <- population[1, ]
   
-  # Convert children list to data frame format with ALL columns matching population EXACTLY
+  # Convert children list to data frame format
   children_df_list <- list()
   
   for (child_idx in seq_along(new_children_list)) {
@@ -330,6 +334,8 @@ process_births_and_add_children <- function(population,
     
     # Alive flag
     child_row$alive <- child$alive
+    
+    child_row$nhs_last_health_check_year <- child$nhs_last_health_check_year
     
     # Disease status
     child_row$chd <- child$chd
@@ -401,19 +407,23 @@ process_births_and_add_children <- function(population,
     child_row$death_year <- child$death_year
     child_row$cause_of_death <- child$cause_of_death
     
+    child_row$birth_year <- child$birth_year
+    child_row$maternal_age <- child$maternal_age
+    
     children_df_list[[child_idx]] <- child_row
   }
   
   # Combine all child rows into a single data frame
-  children_df <- do.call(rbind, children_df_list)
-  
+  children_df <- dplyr::bind_rows(children_df_list)
+  print(setdiff(colnames(population), colnames(children_df)))
+  print(setdiff(colnames(children_df), colnames(population)))
   # Ensure exact column structure match
   if (!identical(colnames(population), colnames(children_df))) {
     stop("Column mismatch between population and children_df")
   }
   
   # Combine original population with new children
-  updated_population <- rbind(population, children_df)
+  updated_population <- dplyr::bind_rows(population, children_df)
   
   cat("Added", nrow(children_df), "new children to population\n")
   cat("Population size increased from", nrow(population), "to", nrow(updated_population), "\n")
@@ -425,8 +435,8 @@ process_births_and_add_children <- function(population,
 #
 # # Process births for year 2025
 # population <- process_births_and_add_children(
-#   population,
-#   current_year,
-#   ons_distributions,
-#   hse_distributions
+# population,
+# current_year,
+# ons_distributions,
+# hse_distributions
 # )

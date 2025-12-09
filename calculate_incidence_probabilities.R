@@ -29,7 +29,7 @@ calculate_baseline_incidence_probabilities <- function(hse_distributions = NULL,
   }
   
   incidence_data <- incidence_data %>%
-    filter(measure == "incidence", !is.na(rate_per_100k)) %>%
+    dplyr::filter(measure == "incidence", !is.na(rate_per_100k)) %>%
     mutate(
       disease_std = case_when(
         str_detect(tolower(disease), "chd") ~ "CHD",
@@ -171,17 +171,17 @@ calculate_baseline_incidence_probabilities <- function(hse_distributions = NULL,
     
     # Smoking proportions - filter by age_group and sex_label
     smoking_data <- hse_dist$proportions$smoking %>%
-      filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
+      dplyr::filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
       slice(1)
     
     # BMI proportions  
     bmi_data <- hse_dist$proportions$bmi_categories %>%
-      filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
+      dplyr::filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
       slice(1)
     
     # SBP proportions
     sbp_data <- hse_dist$proportions$sbp_categories %>%
-      filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
+      dplyr::filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
       slice(1)
     
     list(
@@ -206,9 +206,9 @@ calculate_baseline_incidence_probabilities <- function(hse_distributions = NULL,
   calculate_weighted_rr <- function(disease_name, age_str, sex_str, hse_dist) {
     
     applicable_rr <- all_rr %>%
-      filter(disease_std == disease_name, sex_label == sex_str) %>%
+      dplyr::filter(disease_std == disease_name, sex_label == sex_str) %>%
       rowwise() %>%
-      filter(map_age_to_range(age_str, age_range)) %>%
+      dplyr::filter(map_age_to_range(age_str, age_range)) %>%
       ungroup()
     
     if (nrow(applicable_rr) == 0) return(1.0)
@@ -221,7 +221,7 @@ calculate_baseline_incidence_probabilities <- function(hse_distributions = NULL,
     weighted_rrs <- c()
     
     for (rf in unique(applicable_rr$risk_factor)) {
-      rf_data <- applicable_rr %>% filter(risk_factor == rf)
+      rf_data <- applicable_rr %>% dplyr::filter(risk_factor == rf)
       
       if (rf == "smoking") {
         # Check if all smoking prevalences are available
@@ -269,7 +269,7 @@ calculate_baseline_incidence_probabilities <- function(hse_distributions = NULL,
           } else {
             # Get SBP distribution data for this age/sex group
             sbp_dist_data <- hse_dist$distributions$sbp %>%
-              filter(age_group == !!hse_age_group, sex_label == !!sex_label)
+              dplyr::filter(age_group == !!hse_age_group, sex_label == !!sex_label)
             
             if (nrow(sbp_dist_data) == 0) {
               weighted_rr <- 1.0
@@ -282,7 +282,7 @@ calculate_baseline_incidence_probabilities <- function(hse_distributions = NULL,
               
               # Get population proportions for SBP categories
               sbp_prop_data <- hse_dist$proportions$sbp_categories %>%
-                filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
+                dplyr::filter(age_group == !!hse_age_group, sex_label == !!sex_label) %>%
                 slice(1)
               
               if (nrow(sbp_prop_data) == 0) {

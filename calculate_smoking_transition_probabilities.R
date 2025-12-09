@@ -64,12 +64,12 @@ calculate_smoking_transitions_final <- function(longitudinal_file = "longitudina
     
     # Get data for this group
     group_data <- smoking_wide %>%
-      filter(sex == sex_grp, age_group == age_grp) %>%
+      dplyr::filter(sex == sex_grp, age_group == age_grp) %>%
       arrange(year)
     
     # Focus on recent years (2014+) for better relevance
     recent_data <- group_data %>%
-      filter(year >= 2014)
+      dplyr::filter(year >= 2014)
     
     if (nrow(recent_data) < 2) {
       cat("insufficient data\n")
@@ -282,7 +282,7 @@ if (FALSE) {
   
   # Example: Get transition matrix for specific group
   example_group <- smoking_transitions %>%
-    filter(sex == "Men", age_group == "35-44 years")
+    dplyr::filter(sex == "Men", age_group == "35-44 years")
   
   if (nrow(example_group) > 0) {
     cat("Transition matrix for Men 35-44 years:\n")

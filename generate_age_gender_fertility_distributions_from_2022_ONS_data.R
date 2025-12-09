@@ -2,17 +2,17 @@ library(readxl)
 library(dplyr)
 library(tidyr)
 
-generate_ons_distributions <- function(file_path = "data/raw/ONS_Zipped_population_projections_data_files_England/en_ppp_machine_readable.xlsx",
+generate_ons_distributions <- function(ons_file_path = "data/raw/ONS_Zipped_population_projections_data_files_England/en_ppp_machine_readable.xlsx",
                                        reference_year = "2022", 
                                        births_year = "2022 - 2023") {
   
   # Load ONS data
   ons_data <- list(
-    population = readxl::read_excel(file_path, sheet = "Population"),
-    fertility_data = readxl::read_excel(file_path, sheet = "Fertility_assumptions"),
-    mortality_data = readxl::read_excel(file_path, sheet = "Mortality_assumptions"),
-    births_data = readxl::read_excel(file_path, sheet = "Births"),
-    deaths_data = readxl::read_excel(file_path, sheet = "Deaths")
+    population = readxl::read_excel(ons_file_path, sheet = "Population"),
+    fertility_data = readxl::read_excel(ons_file_path, sheet = "Fertility_assumptions"),
+    mortality_data = readxl::read_excel(ons_file_path, sheet = "Mortality_assumptions"),
+    births_data = readxl::read_excel(ons_file_path, sheet = "Births"),
+    deaths_data = readxl::read_excel(ons_file_path, sheet = "Deaths")
   )
   
   # Clean the raw population data
@@ -32,7 +32,7 @@ generate_ons_distributions <- function(file_path = "data/raw/ONS_Zipped_populati
       population = !!sym(reference_year)
     ) %>%
     # Filter out missing values
-    filter(!is.na(population), !is.na(age)) %>%
+    dplyr::filter(!is.na(population), !is.na(age)) %>%
     # Clean age column to handle ranges
     mutate(
       age = case_when(
@@ -41,7 +41,7 @@ generate_ons_distributions <- function(file_path = "data/raw/ONS_Zipped_populati
         TRUE ~ as.numeric(age)
       )
     ) %>%
-    filter(!is.na(age))
+    dplyr::filter(!is.na(age))
   
   # Calculate age distributions
   age_distributions <- ons_data_clean %>%
@@ -81,13 +81,13 @@ generate_ons_distributions <- function(file_path = "data/raw/ONS_Zipped_populati
   
   # Calculate fertility parameters from ONS births data
   births_female <- ons_data$births_data %>%
-    filter(Sex == "Females") %>%
+    dplyr::filter(Sex == "Females") %>%
     dplyr::select(Age, births = all_of(births_year)) %>%
     mutate(age_numeric = as.numeric(Age)) %>%
-    filter(!is.na(births), births > 0)
+    dplyr::filter(!is.na(births), births > 0)
   
   pop_female <- ons_data$population %>%
-    filter(Sex == "Females") %>%
+    dplyr::filter(Sex == "Females") %>%
     dplyr::select(Age, population = all_of(reference_year)) %>%
     mutate(
       age_numeric = case_when(
@@ -96,11 +96,11 @@ generate_ons_distributions <- function(file_path = "data/raw/ONS_Zipped_populati
         TRUE ~ as.numeric(Age)
       )
     ) %>%
-    filter(age_numeric >= 15, age_numeric <= 49, !is.na(population))
+    dplyr::filter(age_numeric >= 15, age_numeric <= 49, !is.na(population))
   
   fertility_data <- births_female %>%
     left_join(pop_female, by = "age_numeric") %>%
-    filter(!is.na(population), population > 0) %>%
+    dplyr::filter(!is.na(population), population > 0) %>%
     mutate(
       asfr = births / population,
       total_births = sum(births, na.rm = TRUE)
