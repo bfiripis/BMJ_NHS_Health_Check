@@ -310,8 +310,8 @@ determine_cause_of_death_vectorized <- function(death_population, diseases) {
   return(causes_of_death)
 }
 
-#' Get disease column name for mortality lookup - FIXED TO MATCH ACTUAL DATA
-#' @param disease Character disease name (as it appears in mortality data)
+#' Get disease column name for mortality lookup
+#' @param disease Character disease name
 #' @return Character column name in population data
 get_disease_column_name <- function(disease) {
   # Map from mortality data disease names to population data column names
@@ -326,7 +326,7 @@ get_disease_column_name <- function(disease) {
   return(disease_col_lookup[[disease]])
 }
 
-# Keep original individual functions for backward compatibility
+# Keep original individual functions for compatibility
 get_age_group_mortality <- function(age) {
   return(get_age_group_mortality_vectorized(age))
 }

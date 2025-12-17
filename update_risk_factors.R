@@ -15,7 +15,7 @@
 #'   and preserving recalculated percentile ranks
 #'
 #' @export
-update_risk_factors <- function(population, longitudinal_hse_distributions, current_year) {
+update_risk_factors <- function(population, longitudinal_hse_distributions, current_year, verbose = TRUE) {
   
   # Calculate new age groups based on current age
   population$new_age_group <- case_when(
@@ -48,9 +48,11 @@ update_risk_factors <- function(population, longitudinal_hse_distributions, curr
   active_bmi_effects <- sum(!is.na(population$nhs_bmi_reduction) & population$nhs_bmi_reduction != 0)
   active_sbp_effects <- sum(!is.na(population$nhs_sbp_reduction) & population$nhs_sbp_reduction != 0)
   
-  cat("Updating risk factors for", nrow(population), "individuals based on", current_year, "distributions\n")
-  if (active_bmi_effects > 0 || active_sbp_effects > 0) {
-    cat("Maintaining", active_bmi_effects, "BMI intervention effects and", active_sbp_effects, "SBP intervention effects\n")
+  if (verbose) {
+    cat("Updating risk factors for", nrow(population), "individuals based on", current_year, "distributions\n")
+    if (active_bmi_effects > 0 || active_sbp_effects > 0) {
+      cat("Maintaining", active_bmi_effects, "BMI intervention effects and", active_sbp_effects, "SBP intervention effects\n")
+    }
   }
   
   # Filter population to exclude 0-16 age group
@@ -187,7 +189,7 @@ update_percentile_ranks <- function(population, longitudinal_hse_distributions, 
   sbp_year_data <- longitudinal_hse_distributions$projections$sbp %>%
     dplyr::filter(year == current_year)
   
-  cat("Updating percentile ranks for", nrow(population), "individuals based on", current_year, "distributions\n")
+  if (verbose) cat("Updating percentile ranks for", nrow(population), "individuals based on", current_year, "distributions\n")
   
   # Check if individuals have had NHS Health Check interventions this year
   had_nhs_check_this_year <- !is.na(population$nhs_last_health_check_year) & 
@@ -354,7 +356,7 @@ decay_nhs_effects <- function(population,
       )
     }
     
-    cat("Applied decay to intervention effects for", sum(decay_mask), "individuals\n")
+    if (verbose) cat("Applied decay to intervention effects for", sum(decay_mask), "individuals\n")
   }
   
   return(population)
@@ -489,7 +491,7 @@ clear_expired_nhs_effects <- function(population,
       )
     }
     
-    cat("Cleared expired effects for", sum(expired_mask), "individuals\n")
+    if (verbose) cat("Cleared expired effects for", sum(expired_mask), "individuals\n")
   }
   
   return(population)

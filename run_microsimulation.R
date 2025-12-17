@@ -76,7 +76,7 @@ run_microsimulation <- function(initial_population,
   step_pb <- NULL
   
   # Initialize main progress bar and header
-  if (show_progress) {
+  if (verbose && show_progress) {
     cat(sprintf("\n=== %s MICROSIMULATION ===\n", toupper(scenario_type)))
     cat(sprintf(
       "Population: %s | Years: %d-%d (%d years) | NHS attendance: M/F %.1f%%/%.1f%%\n",
@@ -116,7 +116,7 @@ run_microsimulation <- function(initial_population,
   
   # Helper function to create step progress bar
   create_step_progress <- function(label, n_steps) {
-    if (show_progress) {
+    if (verbose && show_progress) {
       cat(sprintf("\n  %s", label))
       return(txtProgressBar(min = 0, max = n_steps, style = 1, width = 30, char = "."))
     }
@@ -147,7 +147,7 @@ run_microsimulation <- function(initial_population,
     previous_population <- population
     
     # === STEP 1: POPULATION MAINTENANCE ===
-    if (show_progress) {
+    if (verbose && show_progress) {
       step_pb <- create_step_progress(sprintf("Year %d - Handling aging, births & deaths", current_year), 3)
     }
     
@@ -168,14 +168,15 @@ run_microsimulation <- function(initial_population,
       population = population,
       current_year = current_year,
       ons_distributions = ons_distributions,
-      hse_distributions = hse_distributions
+      hse_distributions = hse_distributions,
+      verbose = verbose
     )
     
     update_step_progress(step_pb, 3)
     close_step_progress(step_pb)
     
     # === STEP 2: NHS HEALTH CHECK INTERVENTION ===
-    if (show_progress) {
+    if (verbose && show_progress) {
       step_pb <- create_step_progress("Applying NHS Health Check intervention", 2)
     }
     
@@ -191,7 +192,8 @@ run_microsimulation <- function(initial_population,
       bmi_reduction = nhs_params$bmi_reduction,
       sbp_reduction = nhs_params$sbp_reduction,
       smoking_cessation_rate = nhs_params$smoking_cessation_rate,
-      seed = seed
+      seed = seed,
+      verbose = verbose
     )
     
     population <- nhs_health_check_result$population
@@ -214,7 +216,7 @@ run_microsimulation <- function(initial_population,
     close_step_progress(step_pb)
     
     # === STEP 3: RISK FACTOR UPDATES ===
-    if (show_progress) {
+    if (verbose && show_progress) {
       step_pb <- create_step_progress("Updating risk factors", 1)
     }
     
@@ -222,14 +224,15 @@ run_microsimulation <- function(initial_population,
     population <- update_risk_factors(
       population = population,
       current_year = current_year,
-      longitudinal_hse_distributions = longitudinal_hse_distributions
+      longitudinal_hse_distributions = longitudinal_hse_distributions,
+      verbose = verbose
     )
     
     update_step_progress(step_pb, 1)
     close_step_progress(step_pb)
     
     # === STEP 4: DISEASE INCIDENCE ===
-    if (show_progress) {
+    if (verbose && show_progress) {
       step_pb <- create_step_progress("Applying disease incidence", length(diseases))
     }
     
@@ -253,7 +256,7 @@ run_microsimulation <- function(initial_population,
     close_step_progress(step_pb)
     
     # === STEP 5: MORTALITY ===
-    if (show_progress) {
+    if (verbose && show_progress) {
       step_pb <- create_step_progress("Applying mortality", 1)
     }
     
@@ -270,7 +273,7 @@ run_microsimulation <- function(initial_population,
     close_step_progress(step_pb)
     
     # === STEP 6: OUTCOME CALCULATION ===
-    if (show_progress) {
+    if (verbose && show_progress) {
       step_pb <- create_step_progress("Calculating annual outcomes", 1)
     }
     
@@ -296,7 +299,7 @@ run_microsimulation <- function(initial_population,
     close_step_progress(step_pb)
     
     # Update main progress bar
-    if (show_progress) {
+    if (verbose && show_progress) {
       setTxtProgressBar(main_pb, year)
     }
     
@@ -314,7 +317,7 @@ run_microsimulation <- function(initial_population,
   }
   
   # Close main progress bar
-  if (show_progress) {
+  if (verbose && show_progress) {
     close(main_pb)
     cat("\n\nSimulation complete! ✓\n")
   }
@@ -336,4 +339,3 @@ run_microsimulation <- function(initial_population,
   
   return(results)
 }
-

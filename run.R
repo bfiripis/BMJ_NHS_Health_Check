@@ -1,5 +1,17 @@
 library(dplyr)
 library(readr)
+library(tidyr)
+library(stringr)
+library(readxl)
+library(tidyverse)
+library(nnet)
+library(mvtnorm)
+library(janitor)
+library(data.table)
+library(progress)
+library(purrr)
+library(fitdistrplus)
+
 
 # Source all functions
 source("R/calculate_incidence_probabilities.R")
@@ -50,34 +62,37 @@ mortality_probabilities <- calculate_post_incidence_mortality(
   prevalence_data = prevalence_data
 )
 
+# Set verbose flag for progress reporting
+verbose <- TRUE
+
 # Generate initial population
-cat("Generating initial population...\n")
+if (verbose) cat("Generating initial population...\n")
 initial_population <- generate_population(
-  n_individuals = 8000000,
+  n_individuals = 80000,
   ons_distributions = ons_distributions,
   hse_distributions = hse_distributions,
   seed = 1234
 )
-cat(sprintf("Initial population generated: %d individuals\n\n", nrow(initial_population)))
+if (verbose) cat(sprintf("Initial population generated: %d individuals\n\n", nrow(initial_population)))
 
 # Set parameters for 3 scenarios
 baseline_params <- list(male_attendance_rate = 0.3803,
                         female_attendance_rate = 0.4396,
-                        intervention_cost = 150,
+                        intervention_cost = 229.57,
                         bmi_reduction = -0.3,
                         sbp_reduction = -3.22,
                         smoking_cessation_rate = 0.0635)
 
 intervention_params <- list(male_attendance_rate = 0.75, 
                             female_attendance_rate = 0.75, 
-                            intervention_cost = 150, 
+                            intervention_cost = 229.57, 
                             bmi_reduction = -0.3, 
                             sbp_reduction = -3.22, 
                             smoking_cessation_rate = 0.0635)
 
 equalized_attendance_params <- list(male_attendance_rate = 0.4396,
                                     female_attendance_rate = 0.4396,
-                                    intervention_cost = 150,
+                                    intervention_cost = 229.57,
                                     bmi_reduction = -0.3,
                                     sbp_reduction = -3.22,
                                     smoking_cessation_rate = 0.0635)
@@ -85,7 +100,7 @@ equalized_attendance_params <- list(male_attendance_rate = 0.4396,
 # Run the simulation with 3 scenarios
 monte_carlo_results <- run_monte_carlo(
   initial_population = initial_population,
-  n_replications = 100,
+  n_replications = 3,
   scenarios = c("baseline", "intervention", "equalized_attendance"),
   start_year = 2024,
   end_year = 2041,
@@ -104,15 +119,15 @@ monte_carlo_results <- run_monte_carlo(
   disease_utilities = disease_utilities,
   costs = costs,
   base_seed = 1234,
-  verbose = FALSE
+  verbose = verbose
 )
 
 # Calculate and view results with confidence intervals
-cat("\n=== CALCULATING CONFIDENCE INTERVALS ===\n")
+if (verbose) cat("\n=== CALCULATING CONFIDENCE INTERVALS ===\n")
 ci_results <- calculate_scenario_confidence_intervals(monte_carlo_results)
 
 # Print formatted results
-print_scenario_confidence_intervals(ci_results)
+if (verbose) print_scenario_confidence_intervals(ci_results)
 
 # Save results to CSV
 output_file <- save_scenario_confidence_intervals(ci_results)

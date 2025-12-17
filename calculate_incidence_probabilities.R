@@ -1,8 +1,3 @@
-library(dplyr)
-library(readr)
-library(tidyr)
-library(stringr)
-
 #' Calculate baseline incidence probabilities adjusted for population risk factor distributions
 #' 
 #' @param hse_distributions List object containing HSE risk factor distributions and proportions

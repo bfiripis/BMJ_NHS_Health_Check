@@ -284,23 +284,23 @@ run_scenario_comparison <- function(scenarios = c("baseline", "intervention", "e
 #'
 #' @export
 run_scenario_comparison <- function(initial_population,
-                                                    scenarios = c("baseline", "intervention", "equalized_attendance"),
-                                                    start_year = 2025,
-                                                    end_year = 2040,
-                                                    baseline_params = NULL,
-                                                    intervention_params = NULL,
-                                                    equalized_attendance_params = NULL,
-                                                    longitudinal_hse_distributions,
-                                                    incidence_probabilities,
-                                                    smoking_relative_risks,
-                                                    blood_pressure_relative_risks,
-                                                    bmi_relative_risks,
-                                                    mortality_probabilities,
-                                                    age_sex_utilities,
-                                                    disease_utilities,
-                                                    costs,
-                                                    seed = 1234,
-                                                    verbose = TRUE) {
+                                    scenarios = c("baseline", "intervention", "equalized_attendance"),
+                                    start_year = 2025,
+                                    end_year = 2040,
+                                    baseline_params = NULL,
+                                    intervention_params = NULL,
+                                    equalized_attendance_params = NULL,
+                                    longitudinal_hse_distributions,
+                                    incidence_probabilities,
+                                    smoking_relative_risks,
+                                    blood_pressure_relative_risks,
+                                    bmi_relative_risks,
+                                    mortality_probabilities,
+                                    age_sex_utilities,
+                                    disease_utilities,
+                                    costs,
+                                    seed = 1234,
+                                    verbose = TRUE) {
   
   # Set default parameters if not provided
   if (is.null(baseline_params)) {

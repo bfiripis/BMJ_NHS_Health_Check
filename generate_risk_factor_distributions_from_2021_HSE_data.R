@@ -1,9 +1,3 @@
-library(dplyr)
-library(fitdistrplus)
-library(readr)
-library(janitor)
-library(purrr)
-library(tidyr)
 generate_hse_distributions <- function(hse_2021_file_path = "data/raw/hse_2021_eul_v1.tab", 
                                        prevalence_file_path = "data/prevalence.csv") {
   
@@ -62,7 +56,7 @@ generate_hse_distributions <- function(hse_2021_file_path = "data/raw/hse_2021_e
           smkevr_19 == 2 & cignow_19 == 1 ~ "Ex-smoker",
           TRUE ~ NA_character_
         ),
-        # Create BMI categories for proportions (using cleaned values)
+        # Create BMI categories for proportions
         bmi_category = case_when(
           !is.na(bmi_clean) & bmi_clean < 18.5 ~ "Underweight",
           !is.na(bmi_clean) & bmi_clean >= 18.5 & bmi_clean < 25 ~ "Normal weight",
@@ -70,7 +64,7 @@ generate_hse_distributions <- function(hse_2021_file_path = "data/raw/hse_2021_e
           !is.na(bmi_clean) & bmi_clean >= 30 ~ "Obese",
           TRUE ~ NA_character_
         ),
-        # Create SBP categories for proportions (using cleaned values)
+        # Create SBP categories for proportions
         sbp_category = case_when(
           !is.na(sbp_clean) & sbp_clean < 120 ~ "Normotensive",
           !is.na(sbp_clean) & sbp_clean >= 120 & sbp_clean < 140 ~ "Prehypertensive",

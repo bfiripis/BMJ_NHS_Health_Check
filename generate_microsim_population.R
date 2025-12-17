@@ -1,5 +1,5 @@
+# Required libraries
 library(dplyr)
-library(data.table)
 library(progress)
 
 # Pre-computed lookup tables for age group conversion
@@ -467,6 +467,58 @@ generate_population <- function(n_individuals, ons_distributions, hse_distributi
   
   pb$tick(15, tokens = list(what = "Smoking status generated"))
   
+  # Disease prevalence sampling using ONS distributions
+  if (!is.null(hse_distributions$disease_prevalence)) {
+    disease_prev <- hse_distributions$disease_prevalence
+    
+    # Create lookup key for disease prevalence (age_group_sex_label)
+    disease_lookup_key <- paste(population_df$current_age_group, population_df$sex_label, sep = "_")
+    
+    # Initialize disease states as FALSE
+    population_df$chd <- FALSE
+    population_df$colorectal_cancer <- FALSE  
+    population_df$lung_cancer <- FALSE
+    population_df$stroke <- FALSE
+    population_df$copd <- FALSE
+    
+    # Sample each disease based on prevalence probabilities
+    diseases <- c("CHD", "colorectal_cancer", "lung_cancer", "stroke", "COPD")
+    disease_cols <- c("chd", "colorectal_cancer", "lung_cancer", "stroke", "copd")
+    
+    for (i in seq_along(diseases)) {
+      disease_name <- diseases[i]
+      col_name <- disease_cols[i]
+      
+      # Get prevalence data for this disease
+      disease_data <- disease_prev %>% 
+        filter(disease == disease_name) %>%
+        mutate(lookup_key = paste(age, sex_label, sep = "_"))
+      
+      # Create prevalence lookup
+      prevalence_lookup <- setNames(disease_data$prevalence_prob, disease_data$lookup_key)
+      
+      # Get prevalence probabilities for each individual
+      individual_probs <- prevalence_lookup[disease_lookup_key]
+      
+      # Handle missing prevalence data (set to 0)
+      individual_probs[is.na(individual_probs)] <- 0
+      
+      # Sample disease status based on prevalence probability
+      population_df[[col_name]] <- runif(n_individuals) < individual_probs
+    }
+    
+    pb$tick(10, tokens = list(what = "Disease prevalence sampled"))
+  } else {
+    # Fallback: initialize all diseases as FALSE if no prevalence data
+    population_df$chd <- FALSE
+    population_df$colorectal_cancer <- FALSE
+    population_df$lung_cancer <- FALSE  
+    population_df$stroke <- FALSE
+    population_df$copd <- FALSE
+    
+    pb$tick(10, tokens = list(what = "Disease states initialized as FALSE"))
+  }
+  
   # Birth history processing
   # Only process women of reproductive age
   women_indices <- which(population_df$sex_label == "Women" & population_df$age >= 15)
@@ -511,7 +563,7 @@ generate_population <- function(n_individuals, ons_distributions, hse_distributi
   population_df$birth_ages[non_eligible] <- lapply(non_eligible, function(x) numeric(0))
   population_df$birth_years[non_eligible] <- lapply(non_eligible, function(x) integer(0))
   
-  pb$tick(20, tokens = list(what = "Birth histories processed"))
+  pb$tick(10, tokens = list(what = "Birth histories processed"))
   
   # Complete progress bar
   pb$tick(5, tokens = list(what = "Complete"))

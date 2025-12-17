@@ -1,8 +1,3 @@
-library(dplyr)
-library(readr)
-library(readxl)
-library(stringr)
-
 #' Calculate annual post-incidence mortality rates by disease, age and sex
 #' 
 #' @param mortality_data Data frame with mortality data (default: NULL, will read from file)

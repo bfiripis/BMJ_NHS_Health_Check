@@ -1,9 +1,6 @@
-#' Apply NHS Health Check Intervention with Percentile Rank Recalculation
+#' Apply NHS Health Check Intervention
 #'
 #' Implements the NHS Health Check intervention for eligible individuals in the population.
-#' This revised version recalculates percentile ranks immediately after intervention
-#' to ensure that the percentile rank system accurately reflects individuals' new
-#' position in the population distribution after receiving BMI/SBP reductions.
 #'
 #' @param population Population dataframe with individual health data
 #' @param current_year Current simulation year
@@ -33,14 +30,15 @@ apply_nhs_health_check <- function(population,
                                    bmi_reduction = -0.3,
                                    sbp_reduction = -3.22,
                                    smoking_cessation_rate = 0.0635,
-                                   seed = NULL) {
+                                   seed = NULL,
+                                   verbose = TRUE) {
   
   # Set seed if provided
   if (!is.null(seed)) {
     set.seed(seed)
   }
   
-  # Initialize persistent effect columns if they don't exist
+  # Initialize persistent effect columns
   if (!"nhs_bmi_reduction" %in% names(population)) {
     population$nhs_bmi_reduction <- 0
   }
@@ -51,7 +49,6 @@ apply_nhs_health_check <- function(population,
     population$nhs_last_health_check_year <- NA_real_
   }
   
-  # Initialize compatibility columns if they don't exist (for original data structure)
   if (!"last_health_check_year" %in% names(population)) {
     population$last_health_check_year <- population$nhs_last_health_check_year
   }
@@ -59,7 +56,7 @@ apply_nhs_health_check <- function(population,
   # Determine eligibility for NHS Health Check
   eligible_individuals <- identify_eligible_individuals_compatible(population, current_year)
   
-  cat("NHS Health Check", current_year, ":", nrow(eligible_individuals), "eligible individuals\n")
+  if (verbose) cat("NHS Health Check", current_year, ":", nrow(eligible_individuals), "eligible individuals\n")
   
   if (nrow(eligible_individuals) == 0) {
     return(list(
@@ -80,7 +77,7 @@ apply_nhs_health_check <- function(population,
   attendees <- attendance_result$attendees
   summary <- attendance_result$summary
   
-  cat("Attendance:", nrow(attendees), "of", nrow(eligible_individuals), "eligible individuals\n")
+  if (verbose) cat("Attendance:", nrow(attendees), "of", nrow(eligible_individuals), "eligible individuals\n")
   
   # Calculate intervention costs
   total_cost <- nrow(attendees) * intervention_cost
@@ -93,15 +90,18 @@ apply_nhs_health_check <- function(population,
       longitudinal_hse_distributions,
       bmi_reduction, 
       sbp_reduction, 
-      smoking_cessation_rate
+      smoking_cessation_rate,
+      verbose
     )
     
     # Update the population with modified attendees
     population[population$id %in% attendees_modified$id, ] <- attendees_modified
     
-    cat("Applied interventions to", nrow(attendees_modified), "attendees\n")
-    cat("BMI reductions:", sum(!is.na(attendees_modified$nhs_bmi_reduction) & attendees_modified$nhs_bmi_reduction != 0), "individuals\n")
-    cat("SBP reductions:", sum(!is.na(attendees_modified$nhs_sbp_reduction) & attendees_modified$nhs_sbp_reduction != 0), "individuals\n")
+    if (verbose) {
+      cat("Applied interventions to", nrow(attendees_modified), "attendees\n")
+      cat("BMI reductions:", sum(!is.na(attendees_modified$nhs_bmi_reduction) & attendees_modified$nhs_bmi_reduction != 0), "individuals\n")
+      cat("SBP reductions:", sum(!is.na(attendees_modified$nhs_sbp_reduction) & attendees_modified$nhs_sbp_reduction != 0), "individuals\n")
+    }
   }
   
   return(list(
@@ -111,7 +111,7 @@ apply_nhs_health_check <- function(population,
   ))
 }
 
-#' Identify eligible individuals (compatible with original data structure)
+#' Identify eligible individuals
 identify_eligible_individuals_compatible <- function(population, current_year) {
   
   # Start with basic age and disease eligibility
@@ -172,7 +172,7 @@ identify_eligible_individuals_compatible <- function(population, current_year) {
   return(eligible_individuals)
 }
 
-#' Determine attendance (compatible with both sex label formats)
+#' Determine attendance
 determine_attendance_compatible <- function(eligible_individuals, 
                                             male_attendance_rate, 
                                             female_attendance_rate) {
@@ -200,7 +200,7 @@ determine_attendance_compatible <- function(eligible_individuals,
   male_indices <- which(eligible_individuals$sex_label %in% male_labels)
   female_indices <- which(eligible_individuals$sex_label %in% female_labels)
   
-  # Determine attendance using individual probability approach (matches original)
+  # Determine attendance using individual probability approach
   eligible_individuals$attends_health_check <- FALSE
   
   # Males - each individual has male_attendance_rate probability of attending
@@ -252,11 +252,12 @@ apply_risk_factor_modifications_with_percentile_update <- function(attendees,
                                                                    longitudinal_hse_distributions,
                                                                    bmi_reduction,
                                                                    sbp_reduction,
-                                                                   smoking_cessation_rate) {
+                                                                   smoking_cessation_rate,
+                                                                   verbose = TRUE) {
   
   attendees_modified <- attendees
   
-  # Update both health check year columns for compatibility
+  # Update both health check year columns
   attendees_modified$nhs_last_health_check_year <- current_year
   if ("last_health_check_year" %in% names(attendees_modified)) {
     attendees_modified$last_health_check_year <- current_year
@@ -281,7 +282,7 @@ apply_risk_factor_modifications_with_percentile_update <- function(attendees,
     # Mark for percentile recalculation
     bmi_intervention_applied[obese_mask] <- TRUE
     
-    cat("BMI reduction applied to", sum(obese_mask), "obese individuals\n")
+    if (verbose) cat("BMI reduction applied to", sum(obese_mask), "obese individuals\n")
   }
   
   # SBP reduction for hypertensive individuals  
@@ -299,7 +300,7 @@ apply_risk_factor_modifications_with_percentile_update <- function(attendees,
     # Mark for percentile recalculation
     sbp_intervention_applied[hypertensive_mask] <- TRUE
     
-    cat("SBP reduction applied to", sum(hypertensive_mask), "hypertensive individuals\n")
+    if (verbose) cat("SBP reduction applied to", sum(hypertensive_mask), "hypertensive individuals\n")
   }
   
   # Smoking cessation for current smokers
@@ -313,7 +314,7 @@ apply_risk_factor_modifications_with_percentile_update <- function(attendees,
     # Update smoking status for those who quit
     attendees_modified$smoking_status[current_smokers[quit_smoking]] <- "Former smoker"
     
-    if (sum(quit_smoking) > 0) {
+    if (verbose && sum(quit_smoking) > 0) {
       cat("Smoking cessation applied to", sum(quit_smoking), "current smokers\n")
     }
   }
@@ -328,9 +329,11 @@ apply_risk_factor_modifications_with_percentile_update <- function(attendees,
       sbp_intervention_mask = sbp_intervention_applied
     )
     
-    cat("Recalculated percentile ranks for", 
-        sum(bmi_intervention_applied), "BMI and", 
-        sum(sbp_intervention_applied), "SBP intervention recipients\n")
+    if (verbose) {
+      cat("Recalculated percentile ranks for", 
+          sum(bmi_intervention_applied), "BMI and", 
+          sum(sbp_intervention_applied), "SBP intervention recipients\n")
+    }
   }
   
   return(attendees_modified)
@@ -342,7 +345,7 @@ apply_risk_factor_modifications_with_percentile_update <- function(attendees,
 #' interventions, based on their new BMI/SBP values and the current year's
 #' population distribution.
 #'
-#' @param population Population dataframe (usually attendees subset)
+#' @param population Population dataframe
 #' @param longitudinal_hse_distributions Longitudinal HSE distributions
 #' @param current_year Current simulation year
 #' @param bmi_intervention_mask Logical vector indicating who received BMI intervention

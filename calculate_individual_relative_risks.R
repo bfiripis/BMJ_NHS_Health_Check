@@ -1,5 +1,3 @@
-library(dplyr)
-
 #' Calculate Individual Relative Risk for Microsimulation
 #' 
 #' This function calculates the relative risk for an individual based on their
@@ -296,55 +294,4 @@ calculate_individual_mortality <- function(individual_data, baseline_mortality_r
                                                     individual_mortality$total_disease_prob + individual_mortality$other_causes_prob)
   
   return(individual_mortality)
-}
-
-# Example usage function
-example_individual_rr_calculation <- function() {
-  
-  cat("Loading relative risk data...\n")
-  relative_risks <- load_relative_risks(
-    bmi_file = "/mnt/user-data/uploads/BMI_relative_risks.csv",
-    smoking_file = "/mnt/user-data/uploads/smoking_relative_risks.csv",
-    bp_file = "/mnt/user-data/uploads/blood_pressure_relative_risks.csv"
-  )
-  
-  # Example individuals
-  example_people <- data.frame(
-    id = 1:4,
-    age = c(45, 55, 65, 35),
-    sex_label = c("Men", "Women", "Men", "Women"),
-    bmi = c(22, 28, 35, 26),
-    smoking_status = c("Never smoker", "Ex-smoker", "Current smoker", "Never smoker"),
-    sbp = c(120, 140, 160, 115)
-  )
-  
-  cat("=== EXAMPLE INDIVIDUAL RELATIVE RISK CALCULATIONS ===\n\n")
-  
-  diseases <- c("CHD", "lung_cancer", "COPD")
-  
-  for (i in 1:nrow(example_people)) {
-    person <- example_people[i, ]
-    cat("Person", i, "- Age:", person$age, ", Sex:", person$sex_label, 
-        ", BMI:", person$bmi, ", Smoking:", person$smoking_status, 
-        ", SBP:", person$sbp, "\n")
-    
-    for (disease in diseases) {
-      individual_rr <- calculate_individual_rr(
-        bmi = person$bmi,
-        smoking_status = person$smoking_status,
-        sbp = person$sbp,
-        age = person$age,
-        sex = person$sex_label,
-        disease = disease,
-        relative_risks = relative_risks
-      )
-      cat("  ", disease, "RR:", round(individual_rr, 2), "\n")
-    }
-    cat("\n")
-  }
-  
-  cat("Note: These individual RRs would be multiplied by baseline disease rates\n")
-  cat("to get actual mortality probabilities in the microsimulation.\n\n")
-  
-  return(relative_risks)
 }

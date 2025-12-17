@@ -1,6 +1,4 @@
 #' Apply disease incidence probabilities and simulate disease occurrence
-#' Optimized version with vectorized operations
-#' Integrated with ex-smoker relative risk calculations
 #'
 #' @param population Data frame with individual characteristics
 #' @param incidence_probabilities Data frame with baseline incidence rates
@@ -317,14 +315,13 @@ get_smoking_relative_risk_vectorized <- function(smoking_rr, disease, sexes, smo
     return(rep(1, length(sexes)))
   }
   
-  # First attempt: exact age group matching
   lookup_keys_exact <- paste(disease_data$Sex, disease_data$Smoking_Status, disease_data$Age, sep = "|||")
   population_keys_exact <- paste(sexes, smoking_mapped, age_groups, sep = "|||")
   match_indices_exact <- match(population_keys_exact, lookup_keys_exact)
   
   relative_risks <- disease_data$Relative_Risk[match_indices_exact]
   
-  # For colorectal cancer, try broad age range for missing matches
+  # For colorectal cancer, broad age range for missing matches
   if (disease_name == "Colorectal_Cancer") {
     na_mask <- is.na(relative_risks)
     if (any(na_mask)) {

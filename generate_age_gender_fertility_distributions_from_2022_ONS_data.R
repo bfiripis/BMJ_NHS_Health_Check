@@ -1,7 +1,3 @@
-library(readxl)
-library(dplyr)
-library(tidyr)
-
 generate_ons_distributions <- function(ons_file_path = "data/raw/ONS_Zipped_population_projections_data_files_England/en_ppp_machine_readable.xlsx",
                                        reference_year = "2022", 
                                        births_year = "2022 - 2023") {

@@ -1,24 +1,15 @@
 #' Calculate Smoking Transition Probabilities from Longitudinal Data
 #' 
 #' This function calculates realistic smoking transition probabilities using
-#' actual longitudinal smoking survey data, avoiding the population-level
-#' projection issues identified earlier.
+#'longitudinal smoking survey data
 #' 
 #' @param longitudinal_file Path to longitudinal smoking CSV file
 #' @return Data frame with transition probabilities by demographic group
 #' 
 #' @details
 #' Uses observed year-over-year changes in smoking prevalence from survey data
-#' to estimate individual-level transition rates. This approach provides more
-#' realistic rates for microsimulation compared to population projections.
-#' 
-#' Output includes:
-#' - Demographic group information
-#' - Estimated transition rates (initiation, cessation, relapse)
-#' - Complete 3x3 transition matrices
-#' - Data quality metrics
+#' to estimate individual-level transition rates.
 #'
-library(tidyverse)
 
 calculate_smoking_transitions_final <- function(longitudinal_file = "longitudinal_smoking.csv") {
   

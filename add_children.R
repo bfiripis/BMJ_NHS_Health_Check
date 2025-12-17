@@ -1,5 +1,3 @@
-library(dplyr)
-
 #' Generate a new child individual with all microsimulation fields initialized
 #'
 #' @param maternal_age Age of the mother at birth
@@ -217,7 +215,8 @@ process_births_and_add_children <- function(population,
                                             current_year,
                                             ons_distributions,
                                             hse_distributions,
-                                            sim_end_year = 2040) {
+                                            sim_end_year = 2040,
+                                            verbose = TRUE) {
   
   # Find women who are giving birth this year
   women_giving_birth <- population %>%
@@ -235,11 +234,11 @@ process_births_and_add_children <- function(population,
   
   # If no births this year, return original population
   if (nrow(women_giving_birth) == 0) {
-    cat("No births in year", current_year, "\n")
+    if (verbose) cat("No births in year", current_year, "\n")
     return(population)
   }
   
-  cat("Processing", nrow(women_giving_birth), "births in year", current_year, "\n")
+  if (verbose) cat("Processing", nrow(women_giving_birth), "births in year", current_year, "\n")
   
   # Generate children for each birth
   new_children_list <- list()
@@ -415,8 +414,10 @@ process_births_and_add_children <- function(population,
   
   # Combine all child rows into a single data frame
   children_df <- dplyr::bind_rows(children_df_list)
-  print(setdiff(colnames(population), colnames(children_df)))
-  print(setdiff(colnames(children_df), colnames(population)))
+  if (verbose) {
+    print(setdiff(colnames(population), colnames(children_df)))
+    print(setdiff(colnames(children_df), colnames(population)))
+  }
   # Ensure exact column structure match
   if (!identical(colnames(population), colnames(children_df))) {
     stop("Column mismatch between population and children_df")
@@ -425,8 +426,10 @@ process_births_and_add_children <- function(population,
   # Combine original population with new children
   updated_population <- dplyr::bind_rows(population, children_df)
   
-  cat("Added", nrow(children_df), "new children to population\n")
-  cat("Population size increased from", nrow(population), "to", nrow(updated_population), "\n")
+  if (verbose) {
+    cat("Added", nrow(children_df), "new children to population\n")
+    cat("Population size increased from", nrow(population), "to", nrow(updated_population), "\n")
+  }
   
   return(updated_population)
 }

@@ -1,4 +1,5 @@
 #' Apply Smoking State Transitions
+#'  (testing version used static parameters prior to defining matrix algebra for transition matrix)
 #' 
 #' Applies annual smoking state transitions to individuals based on assumed
 #' transition probabilities. Uses a simple 3-state model: Never, Former, Current.
