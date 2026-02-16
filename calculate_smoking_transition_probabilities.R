@@ -124,7 +124,7 @@ calculate_smoking_transitions_final <- function(longitudinal_file = "longitudina
       )
       
       all_results <- bind_rows(all_results, result)
-      cat("✓ (", avg_rates$n_transitions, "transitions )\n")
+      cat("done (", avg_rates$n_transitions, "transitions )\n")
       
     } else {
       cat("no valid transitions\n")

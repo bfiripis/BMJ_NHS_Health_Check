@@ -482,8 +482,7 @@ print_scenario_confidence_intervals <- function(ci_results, show_cost_effectiven
     return()
   }
   
-  cat("=== 3-SCENARIO COMPARISON CONFIDENCE INTERVALS ===\n\n")
-  
+
   # Helper function to format and print a group of outcomes
   print_outcome_group <- function(outcomes_subset, group_title) {
     if (nrow(outcomes_subset) > 0) {

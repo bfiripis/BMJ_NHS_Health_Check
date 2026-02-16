@@ -25,7 +25,7 @@ calculate_aggregate_outcomes <- function(population,
                                          intervention_costs = 0) {
   
   
-  # Clean utility data (remove BOM characters if present)
+  # Clean utility data (remove BOM characters)
   age_sex_utilities <- age_sex_utilities %>%
     rename_with(~gsub("^[^A-Za-z]+", "", .x))
   
@@ -360,7 +360,7 @@ calculate_aggregate_outcomes <- function(population,
 }
 
 
-#' Calculate Disease Costs by Sex (Helper Function)
+#' Calculate Disease Costs by Sex
 #'
 #' Calculate total and disease-specific costs for the population disaggregated by sex
 #'
@@ -456,7 +456,7 @@ calculate_disease_costs_by_sex <- function(population, costs, diseases) {
 }
 
 
-#' Calculate Individual Utilities (Helper Function)
+#' Calculate Individual Utilities
 #'
 #' Calculate utility scores for each individual for QALY calculation
 #'
@@ -557,7 +557,7 @@ calculate_individual_utilities <- function(population,
 }
 
 
-#' Calculate Disease Costs (Helper Function)
+#' Calculate Disease Costs
 #'
 #' Calculate total and disease-specific costs for the population
 #'

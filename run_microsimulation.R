@@ -1,7 +1,7 @@
 #' Run Microsimulation
 #'
 #'
-#' @param initial_population Pre-generated population (from scenario comparison)
+#' @param initial_population Pre-generated population (from scenario comparison)s
 #' @param scenario_type Character: "baseline" or "intervention"
 #' @param nhs_params List of NHS Health Check parameters
 #' @param start_year Starting year for simulation (default: 2025)
@@ -99,7 +99,7 @@ run_microsimulation <- function(initial_population,
     cat("Simulation Progress:\n")
   }
   
-  # Print simulation start info (only if verbose and not showing progress)
+  # Print simulation start info
   if (verbose && !show_progress) {
     cat(sprintf(
       "Running %s microsimulation: %d individuals, %d-%d (%d years)\n",
@@ -134,7 +134,7 @@ run_microsimulation <- function(initial_population,
   close_step_progress <- function(pb) {
     if (!is.null(pb)) {
       close(pb)
-      cat(" ✓\n")
+      cat(" done\n")
     }
   }
   
@@ -146,7 +146,7 @@ run_microsimulation <- function(initial_population,
     # Store current population before changes for comparison
     previous_population <- population
     
-    # === STEP 1: POPULATION MAINTENANCE ===
+    # Step 1: Population Maintenance
     if (verbose && show_progress) {
       step_pb <- create_step_progress(sprintf("Year %d - Handling aging, births & deaths", current_year), 3)
     }
@@ -175,7 +175,7 @@ run_microsimulation <- function(initial_population,
     update_step_progress(step_pb, 3)
     close_step_progress(step_pb)
     
-    # === STEP 2: NHS HEALTH CHECK INTERVENTION ===
+    # Step 2: NHS Health Check Intervention
     if (verbose && show_progress) {
       step_pb <- create_step_progress("Applying NHS Health Check intervention", 2)
     }
@@ -215,12 +215,12 @@ run_microsimulation <- function(initial_population,
     update_step_progress(step_pb, 2)
     close_step_progress(step_pb)
     
-    # === STEP 3: RISK FACTOR UPDATES ===
+    # Step 3: Risk Factor Updates
     if (verbose && show_progress) {
       step_pb <- create_step_progress("Updating risk factors", 1)
     }
     
-    # Update risk factors - handles natural aging and smoking transitions
+    # Update risk factors
     population <- update_risk_factors(
       population = population,
       current_year = current_year,
@@ -231,7 +231,7 @@ run_microsimulation <- function(initial_population,
     update_step_progress(step_pb, 1)
     close_step_progress(step_pb)
     
-    # === STEP 4: DISEASE INCIDENCE ===
+    # Step 4: Disease Incidence
     if (verbose && show_progress) {
       step_pb <- create_step_progress("Applying disease incidence", length(diseases))
     }
@@ -255,7 +255,7 @@ run_microsimulation <- function(initial_population,
     }
     close_step_progress(step_pb)
     
-    # === STEP 5: MORTALITY ===
+    # Step 5: Mortality
     if (verbose && show_progress) {
       step_pb <- create_step_progress("Applying mortality", 1)
     }
@@ -272,7 +272,7 @@ run_microsimulation <- function(initial_population,
     update_step_progress(step_pb, 1)
     close_step_progress(step_pb)
     
-    # === STEP 6: OUTCOME CALCULATION ===
+    # Step 6: Outcome Calculations
     if (verbose && show_progress) {
       step_pb <- create_step_progress("Calculating annual outcomes", 1)
     }
@@ -303,7 +303,7 @@ run_microsimulation <- function(initial_population,
       setTxtProgressBar(main_pb, year)
     }
     
-    # Concise year-by-year monitoring (only if verbose and not showing progress)
+    # year-by-year monitoring
     if (verbose && !show_progress) {
       cat(sprintf(
         "Year %d: %d alive | Deaths: %d | QALYs: %.0f | Costs: £%.0fk\n",
@@ -319,7 +319,7 @@ run_microsimulation <- function(initial_population,
   # Close main progress bar
   if (verbose && show_progress) {
     close(main_pb)
-    cat("\n\nSimulation complete! ✓\n")
+    cat("\n\nSimulation complete\n")
   }
   
   # Return results

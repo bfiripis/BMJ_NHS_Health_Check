@@ -33,7 +33,7 @@ apply_disease_incidence <- function(
   updated_population <- population
   n_population <- nrow(updated_population)
   
-  # Pre-compute age groups vectorized
+  # Pre-compute age groups
   updated_population$age_group_incidence <- get_age_group_incidence_vectorized(updated_population$age)
   updated_population$age_group_smoking <- get_age_group_smoking_vectorized(updated_population$age)
   updated_population$age_group_bp <- get_age_group_bp_vectorized(updated_population$age)
@@ -71,10 +71,10 @@ apply_disease_incidence <- function(
     }
   }
   
-  # Process each disease vectorized
+  # Process each disease
   for (disease in diseases) {
     
-    # Get baseline incidence probabilities vectorized
+    # Get baseline incidence probabilities
     baseline_probs <- get_baseline_incidence_vectorized(
       incidence_probabilities,
       disease,
@@ -82,7 +82,7 @@ apply_disease_incidence <- function(
       updated_population$sex_standard
     )
     
-    # Get smoking relative risks vectorized
+    # Get smoking relative risks
     smoking_rrs <- get_smoking_relative_risk_vectorized(
       smoking_relative_risks,
       disease,
@@ -91,7 +91,7 @@ apply_disease_incidence <- function(
       updated_population$age_group_smoking
     )
     
-    # Get blood pressure relative risks vectorized
+    # Get blood pressure relative risks
     bp_rrs <- get_bp_relative_risk_vectorized(
       blood_pressure_relative_risks,
       disease,
@@ -100,7 +100,7 @@ apply_disease_incidence <- function(
       updated_population$age_group_bp
     )
     
-    # Get BMI relative risks vectorized
+    # Get BMI relative risks
     bmi_rrs <- get_bmi_relative_risk_vectorized(
       bmi_relative_risks,
       disease,
@@ -168,7 +168,7 @@ apply_disease_incidence <- function(
   return(updated_population)
 }
 
-#' Vectorized age group functions
+#' Age group functions
 #' @param ages Numeric vector of ages
 #' @return Character vector of age groups
 
@@ -234,7 +234,7 @@ get_age_group_bmi_vectorized <- function(ages) {
   return(age_groups)
 }
 
-#' Vectorized baseline incidence lookup
+#' Baseline incidence lookup
 #' @param incidence_probabilities Data frame with baseline rates
 #' @param disease Character disease name
 #' @param age_groups Character vector of age groups
@@ -277,7 +277,7 @@ get_baseline_incidence_vectorized <- function(incidence_probabilities, disease, 
   return(probabilities)
 }
 
-#' Vectorized smoking relative risk lookup
+#' Smoking relative risk lookup
 #' @param smoking_rr Data frame with smoking relative risks
 #' @param disease Character disease name
 #' @param sexes Character vector of sex labels
@@ -344,7 +344,7 @@ get_smoking_relative_risk_vectorized <- function(smoking_rr, disease, sexes, smo
   return(relative_risks)
 }
 
-#' Vectorized blood pressure relative risk calculation
+#' Blood pressure relative risk calculation
 #' @param bp_rr Data frame with BP relative risks
 #' @param disease Character disease name
 #' @param sexes Character vector of sex labels
@@ -430,7 +430,7 @@ get_bp_relative_risk_vectorized <- function(bp_rr, disease, sexes, sbps, age_gro
   return(relative_risks)
 }
 
-#' Vectorized BMI relative risk lookup
+#' BMI relative risk lookup
 #' @param bmi_rr Data frame with BMI relative risks
 #' @param disease Character disease name
 #' @param sexes Character vector of sex labels
@@ -516,7 +516,7 @@ get_bmi_relative_risk_vectorized <- function(bmi_rr, disease, sexes, bmi_categor
   return(relative_risks)
 }
 
-# Keep original individual functions for backward compatibility
+# Original individual functions for backward compatibility
 get_age_group_incidence <- function(age) {
   return(get_age_group_incidence_vectorized(age))
 }

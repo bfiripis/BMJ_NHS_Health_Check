@@ -1,5 +1,4 @@
 #' Apply mortality probabilities and simulate death occurrence
-#' Optimized version with vectorized operations
 #'
 #' @param population Data frame with individual characteristics and disease status
 #' @param mortality_probabilities Data frame with baseline mortality rates
@@ -82,7 +81,7 @@ apply_mortality <- function(
   survival_probs_matrix <- matrix(1, nrow = n_alive, ncol = length(diseases) + 1)
   survival_probs_matrix[, 1] <- 1 - other_cause_probs  # Other-cause survival
   
-  # Process each disease vectorized
+  # Process each disease
   for (j in seq_along(diseases)) {
     disease <- diseases[j]
     disease_col <- get_disease_column_name(disease)
@@ -133,7 +132,7 @@ apply_mortality <- function(
       updated_population$alive[death_indices] <- FALSE
       updated_population$death_year[death_indices] <- current_year
       
-      # Determine cause of death vectorized
+      # Determine cause of death
       causes_of_death <- determine_cause_of_death_vectorized(
         updated_population[death_indices, ],
         diseases
@@ -326,7 +325,7 @@ get_disease_column_name <- function(disease) {
   return(disease_col_lookup[[disease]])
 }
 
-# Keep original individual functions for compatibility
+# Original individual functions for compatibility
 get_age_group_mortality <- function(age) {
   return(get_age_group_mortality_vectorized(age))
 }
