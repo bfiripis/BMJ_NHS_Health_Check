@@ -410,7 +410,7 @@ get_bp_relative_risk_vectorized <- function(bp_rr, disease, sexes, sbps, age_gro
     rr_per_10mmhg <- disease_data$Relative_Risk[match_indices]
     
     # Calculate relative risks based on SBP
-    reference_sbp <- 120
+    reference_sbp <- 115
     mmhg_increases <- pmax(0, (sbps - reference_sbp) / 10)  # Only increases above reference
     
     # Apply RR calculation vectorized
